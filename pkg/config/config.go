@@ -6,8 +6,14 @@ import (
 
 var (
 	// Add the SchemaFields for the Config.
-	configField         = field.StringField("configField")
-	ConfigurationFields = []field.SchemaField{configField}
+	ApiToken = field.StringField("apiToken",
+
+		field.WithDescription("The API token for the Rippling connector. This is used to authenticate API requests."),
+		field.WithRequired(true),
+		field.WithIsSecret(true),
+	)
+
+	ConfigurationFields = []field.SchemaField{ApiToken}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.
 	// For example, a username and password can be required together, or an access token can be
