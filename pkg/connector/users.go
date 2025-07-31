@@ -50,10 +50,7 @@ func userResource(user client.User) (*v2.Resource, error) {
 	)
 }
 
-// List returns all the users from the database as resource objects.
-// Users include a UserTrait because they are the 'shape' of a standard user.
 func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-
 	var annotations annotations.Annotations
 	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pToken.Token)
 	annotations = *annotations.WithRateLimiting(ratelimitData)

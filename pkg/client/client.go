@@ -13,7 +13,6 @@ type Client struct {
 }
 
 func New(ctx context.Context, apiToken string) (*Client, error) {
-
 	client, err := uhttp.NewBearerAuth(apiToken).GetClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
@@ -23,4 +22,3 @@ func New(ctx context.Context, apiToken string) (*Client, error) {
 		BaseHttpClient: uhttp.NewBaseHttpClient(client),
 	}, nil
 }
-

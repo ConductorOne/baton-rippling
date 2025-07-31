@@ -78,7 +78,6 @@ type TeamsResponse struct {
 	NextLink string `json:"next_link,omitempty"`
 }
 
-// Worker-specific structs
 type WorkerName struct {
 	Formatted           string `json:"formatted,omitempty"`
 	GivenName           string `json:"given_name,omitempty"`

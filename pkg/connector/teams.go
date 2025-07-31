@@ -91,9 +91,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 				principalId,
 			))
 		}
-
 	}
-
 	return rv, res.NextLink, nil, nil
 }
 
