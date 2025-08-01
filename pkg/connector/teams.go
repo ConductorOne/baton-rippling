@@ -76,6 +76,9 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 
 	rv := []*v2.Grant{}
 	for _, worker := range res.Results {
+		if worker.Status == "TERMINATED" {
+			continue
+		}
 		for _, teamId := range worker.TeamsID {
 			if teamId != resource.Id.Resource {
 				continue
