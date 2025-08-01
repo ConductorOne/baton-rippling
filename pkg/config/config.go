@@ -12,7 +12,6 @@ var (
 		field.WithRequired(true),
 		field.WithIsSecret(true),
 	)
-
 	ConfigurationFields = []field.SchemaField{ApiToken}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.
