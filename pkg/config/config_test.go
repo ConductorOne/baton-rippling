@@ -14,17 +14,15 @@ func TestValidateConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "valid config",
+			name: "valid config",
 			config: &Rippling{
-				// TODO: Add minimal valid configuration here once Config type is generated
+				Apitoken: "something",
 			},
 			wantErr: false,
 		},
 		{
-			name:   "invalid config - missing required fields",
-			config: &Rippling{
-				// TODO: Add configuration with missing required fields once Config type is generated
-			},
+			name:    "invalid config - missing required fields",
+			config:  &Rippling{},
 			wantErr: true,
 		},
 	}
