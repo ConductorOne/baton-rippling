@@ -4,7 +4,7 @@ package config
 import "reflect" 
 
 type Rippling struct {
-	Apitoken string `mapstructure:"apiToken"`
+	ApiToken string `mapstructure:"api-token"`
 }
 
 func (c* Rippling) findFieldByTag(tagValue string) (any, bool) {
