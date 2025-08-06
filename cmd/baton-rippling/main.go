@@ -25,7 +25,7 @@ func main() {
 	_, cmd, err := config.DefineConfiguration(
 		ctx,
 		"baton-rippling",
-		getConnector[*cfg.Rippling],
+		getConnector,
 		cfg.Config,
 	)
 	if err != nil {
@@ -43,13 +43,13 @@ func main() {
 }
 
 // TODO: After the config has been generated, update this function to use the config.
-func getConnector[T field.Configurable](ctx context.Context, config *cfg.Rippling) (types.ConnectorServer, error) {
+func getConnector(ctx context.Context, config *cfg.Rippling) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
 	if err := field.Validate(cfg.Config, config); err != nil {
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, config.GetString(cfg.ApiToken.FieldName))
+	cb, err := connector.New(ctx, config.ApiToken)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

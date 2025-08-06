@@ -16,7 +16,7 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "valid config",
 			config: &Rippling{
-				Apitoken: "something",
+				ApiToken: "something",
 			},
 			wantErr: false,
 		},

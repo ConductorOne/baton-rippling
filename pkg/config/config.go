@@ -6,8 +6,8 @@ import (
 
 var (
 	// Add the SchemaFields for the Config.
-	ApiToken = field.StringField("apiToken",
-
+	ApiToken = field.StringField("api-token",
+		field.WithDisplayName("API token"),
 		field.WithDescription("The API token for the Rippling connector. This is used to authenticate API requests."),
 		field.WithRequired(true),
 		field.WithIsSecret(true),
@@ -25,4 +25,6 @@ var Config = field.NewConfiguration(
 	ConfigurationFields,
 	field.WithConstraints(FieldRelationships...),
 	field.WithConnectorDisplayName("Rippling"),
+	field.WithHelpUrl("/docs/baton/rippling"),
+	field.WithIconUrl("/static/app-icons/rippling.svg"),
 )
