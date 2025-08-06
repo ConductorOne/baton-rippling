@@ -1,8 +1,16 @@
 {
   "fields": [
     {
-      "name": "configField",
-      "stringField": {}
+      "name": "api-token",
+      "displayName": "API token",
+      "description": "The API token for the Rippling connector. This is used to authenticate API requests.",
+      "isRequired": true,
+      "isSecret": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
     },
     {
       "name": "log-level",
@@ -49,5 +57,7 @@
       "boolField": {}
     }
   ],
-  "displayName": "Rippling"
+  "displayName": "Rippling",
+  "helpUrl": "/docs/baton/rippling",
+  "iconUrl": "/static/app-icons/rippling.svg"
 }
