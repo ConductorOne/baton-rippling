@@ -39,14 +39,14 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	teamsResponse, ratelimitData, err := o.client.ListTeams(ctx, pToken.Token)
 	annotations = *annotations.WithRateLimiting(ratelimitData)
 	if err != nil {
-		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list teams: %w", err)
+		return nil, "", annotations, fmt.Errorf("rippling-connector: failed to list teams: %w", err)
 	}
 
 	rv := []*v2.Resource{}
 	for _, team := range teamsResponse.Results {
 		resource, err := teamResource(team)
 		if err != nil {
-			return nil, "", annotations, fmt.Errorf("baton-rippling: failed to convert team %s to resource: %w", team.ID, err)
+			return nil, "", annotations, fmt.Errorf("rippling-connector: failed to convert team %s to resource: %w", team.ID, err)
 		}
 		rv = append(rv, resource)
 	}
@@ -71,7 +71,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 	res, ratelimitDescription, err := o.client.ListWorkers(ctx, pToken.Token)
 	annotations = *annotations.WithRateLimiting(ratelimitDescription)
 	if err != nil {
-		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
+		return nil, "", annotations, fmt.Errorf("rippling-connector: failed to list workers: %w", err)
 	}
 
 	rv := []*v2.Grant{}
@@ -86,7 +86,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 
 			principalId, err := resourceSdk.NewResourceID(userResourceType, worker.UserID)
 			if err != nil {
-				return nil, "", annotations, fmt.Errorf("baton-rippling: failed to create resource ID for user %s: %w", worker.UserID, err)
+				return nil, "", annotations, fmt.Errorf("rippling-connector: failed to create resource ID for user %s: %w", worker.UserID, err)
 			}
 			rv = append(rv, grant.NewGrant(
 				resource,

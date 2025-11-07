@@ -32,8 +32,8 @@ func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.R
 // Metadata returns metadata about the connector.
 func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
-		DisplayName: "My Baton Connector",
-		Description: "The template implementation of a baton connector",
+		DisplayName: "Rippling",
+		Description: "Connector syncing users, teams and team memberships from Rippling to Baton.",
 	}, nil
 }
 
@@ -47,7 +47,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 func New(ctx context.Context, apiToken string) (*Connector, error) {
 	client, err := client.New(ctx, apiToken)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
+		return nil, fmt.Errorf("rippling-connector: failed to create client: %w", err)
 	}
 	return &Connector{
 		client: client,

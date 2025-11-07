@@ -30,7 +30,7 @@ func userResource(user client.User) (*v2.Resource, error) {
 	// convert to time.Time
 	createdAt, err := time.Parse(time.RFC3339, user.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("baton-rippling: failed to parse created_at for user %s: %w", user.ID, err)
+		return nil, fmt.Errorf("rippling-connector: failed to parse created_at for user %s: %w", user.ID, err)
 	}
 
 	email := ""
@@ -55,14 +55,14 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pToken.Token)
 	annotations = *annotations.WithRateLimiting(ratelimitData)
 	if err != nil {
-		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list users: %w", err)
+		return nil, "", annotations, fmt.Errorf("rippling-connector: failed to list users: %w", err)
 	}
 
 	rv := []*v2.Resource{}
 	for _, user := range usersResponse.Results {
 		resource, err := userResource(user)
 		if err != nil {
-			return nil, "", annotations, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
+			return nil, "", annotations, fmt.Errorf("rippling-connector: failed to convert user %s to resource: %w", user.ID, err)
 		}
 		rv = append(rv, resource)
 	}
