@@ -23,11 +23,74 @@ func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User) (*v2.Resource, error) {
+func userResource(user client.User, worker *client.Worker) (*v2.Resource, error) {
 	profile := map[string]any{
 		"username": user.Username,
 		"active":   user.Active,
 		"locale":   user.Locale,
+	}
+
+	// Add worker-related attributes if available
+	if worker != nil {
+		// Employment information
+		if worker.Title != "" {
+			profile["title"] = worker.Title
+		}
+		if worker.Status != "" {
+			profile["status"] = worker.Status
+		}
+		if worker.StartDate != "" {
+			profile["start_date"] = worker.StartDate
+		}
+		if worker.EndDate != "" {
+			profile["end_date"] = worker.EndDate
+		}
+		if worker.WorkEmail != "" {
+			profile["work_email"] = worker.WorkEmail
+		}
+		if worker.Country != "" {
+			profile["country"] = worker.Country
+		}
+
+		// Employment type information
+		if worker.EmploymentType != nil {
+			employmentType := map[string]any{}
+			if worker.EmploymentType.Label != "" {
+				employmentType["label"] = worker.EmploymentType.Label
+			}
+			if worker.EmploymentType.Name != "" {
+				employmentType["name"] = worker.EmploymentType.Name
+			}
+			if worker.EmploymentType.Type != "" {
+				employmentType["type"] = worker.EmploymentType.Type
+			}
+			if len(employmentType) > 0 {
+				profile["employment_type"] = employmentType
+			}
+		}
+
+		// Department information
+		if worker.Department != nil && worker.Department.Name != "" {
+			profile["department"] = worker.Department.Name
+		}
+
+		// Level/rank information
+		if worker.Level != nil && worker.Level.Name != "" {
+			profile["level"] = worker.Level.Name
+		}
+
+		// Manager information
+		if worker.IsManager {
+			profile["is_manager"] = true
+		}
+		if worker.ManagerID != "" {
+			profile["manager_id"] = worker.ManagerID
+		}
+
+		// Location information
+		if worker.Location != nil && worker.Location.WorkLocationID != "" {
+			profile["work_location_id"] = worker.Location.WorkLocationID
+		}
 	}
 
 	// convert to time.Time
@@ -62,9 +125,29 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, pToken *pagina
 		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list users: %w", err)
 	}
 
+	// Fetch workers to get additional profile attributes
+	workersResponse, workersRatelimitData, err := o.client.ListWorkers(ctx, "")
+	if workersRatelimitData != nil {
+		annotations = *annotations.WithRateLimiting(workersRatelimitData)
+	}
+	if err != nil {
+		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
+	}
+
+	// Create a lookup map of workers by user ID for efficient access
+	workersByUserID := make(map[string]*client.Worker)
+	for i := range workersResponse.Results {
+		worker := &workersResponse.Results[i]
+		if worker.UserID != "" {
+			workersByUserID[worker.UserID] = worker
+		}
+	}
+
 	rv := []*v2.Resource{}
 	for _, user := range usersResponse.Results {
-		resource, err := userResource(user)
+		// Look up worker data for this user
+		worker := workersByUserID[user.ID]
+		resource, err := userResource(user, worker)
 		if err != nil {
 			return nil, "", annotations, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
