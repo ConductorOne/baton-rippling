@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/conductorone/baton-rippling/pkg/client"
@@ -12,11 +13,13 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
+const workEmailType = "WORK"
+
 type userBuilder struct {
 	client *client.Client
 }
 
-func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
+func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
@@ -33,24 +36,25 @@ func userResource(user client.User) (*v2.Resource, error) {
 		return nil, fmt.Errorf("baton-rippling: failed to parse created_at for user %s: %w", user.ID, err)
 	}
 
-	email := ""
-	if len(user.Emails) > 0 {
-		email = user.Emails[0].Value
+	userOpts := []resource.UserTraitOption{
+		resource.WithUserProfile(profile),
+		resource.WithCreatedAt(createdAt),
+	}
+
+	email := getWorkEmail(user.Emails)
+	if email != nil {
+		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workEmailType)))
 	}
 
 	return resource.NewUserResource(
 		user.Name.DisplayName,
 		userResourceType,
 		user.ID,
-		[]resource.UserTraitOption{
-			resource.WithUserProfile(profile),
-			resource.WithCreatedAt(createdAt),
-			resource.WithEmail(email, true),
-		},
+		userOpts,
 	)
 }
 
-func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var annotations annotations.Annotations
 	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pToken.Token)
 	annotations = *annotations.WithRateLimiting(ratelimitData)
@@ -70,13 +74,28 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	return rv, usersResponse.NextLink, annotations, nil
 }
 
+func getWorkEmail(emails []client.Email) *client.Email {
+	var workEmail *client.Email
+	for _, e := range emails {
+		if strings.EqualFold(e.Type, workEmailType) {
+			return &e
+		}
+
+		if workEmail == nil {
+			workEmail = &e
+		}
+	}
+
+	return workEmail
+}
+
 // Entitlements always returns an empty slice for users.
-func (o *userBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	return nil, "", nil, nil
 }
 
 // Grants always returns an empty slice for users since they don't have any entitlements.
-func (o *userBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (o *userBuilder) Grants(_ context.Context, _ *v2.Resource, _ *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	return nil, "", nil, nil
 }
 
