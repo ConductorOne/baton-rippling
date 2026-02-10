@@ -1,6 +1,6 @@
 ![Baton Logo](./baton-logo.png)
 
-# `baton-rippling` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-rippling.svg)](https://pkg.go.dev/github.com/conductorone/baton-rippling) ![main ci](https://github.com/conductorone/baton-rippling/actions/workflows/main.yaml/badge.svg)
+# `baton-rippling` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-rippling.svg)](https://pkg.go.dev/github.com/conductorone/baton-rippling) ![verify](https://github.com/conductorone/baton-rippling/actions/workflows/verify.yaml/badge.svg)
 
 `baton-rippling` is a connector for built using the [Baton SDK](https://github.com/conductorone/baton-sdk).
 
