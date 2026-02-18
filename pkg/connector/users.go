@@ -16,7 +16,8 @@ import (
 const workEmailType = "WORK"
 
 type userBuilder struct {
-	client *client.Client
+	client         *client.Client
+	workersByUserID map[string]*client.Worker
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
@@ -80,9 +81,7 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		}
 
 		// Manager information
-		if worker.IsManager {
-			profile["is_manager"] = true
-		}
+		profile["is_manager"] = worker.IsManager
 		if worker.ManagerID != "" {
 			profile["manager_id"] = worker.ManagerID
 		}
@@ -125,28 +124,35 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, pToken *pagina
 		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list users: %w", err)
 	}
 
-	// Fetch workers to get additional profile attributes
-	workersResponse, workersRatelimitData, err := o.client.ListWorkers(ctx, "")
-	if workersRatelimitData != nil {
-		annotations = *annotations.WithRateLimiting(workersRatelimitData)
-	}
-	if err != nil {
-		return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
-	}
-
-	// Create a lookup map of workers by user ID for efficient access
-	workersByUserID := make(map[string]*client.Worker)
-	for i := range workersResponse.Results {
-		worker := &workersResponse.Results[i]
-		if worker.UserID != "" {
-			workersByUserID[worker.UserID] = worker
+	// Fetch all workers once and cache for subsequent pages of users.
+	if o.workersByUserID == nil {
+		o.workersByUserID = make(map[string]*client.Worker)
+		nextLink := ""
+		for {
+			workersResponse, workersRatelimitData, workersErr := o.client.ListWorkers(ctx, nextLink)
+			if workersRatelimitData != nil {
+				annotations = *annotations.WithRateLimiting(workersRatelimitData)
+			}
+			if workersErr != nil {
+				return nil, "", annotations, fmt.Errorf("baton-rippling: failed to list workers: %w", workersErr)
+			}
+			for i := range workersResponse.Results {
+				worker := &workersResponse.Results[i]
+				if worker.UserID != "" {
+					o.workersByUserID[worker.UserID] = worker
+				}
+			}
+			if workersResponse.NextLink == "" {
+				break
+			}
+			nextLink = workersResponse.NextLink
 		}
 	}
 
 	rv := []*v2.Resource{}
 	for _, user := range usersResponse.Results {
 		// Look up worker data for this user
-		worker := workersByUserID[user.ID]
+		worker := o.workersByUserID[user.ID]
 		resource, err := userResource(user, worker)
 		if err != nil {
 			return nil, "", annotations, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
