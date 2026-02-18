@@ -8,7 +8,6 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
-	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 )
 
@@ -68,39 +67,10 @@ func (o *teamBuilder) Entitlements(_ context.Context, r *v2.Resource, _ resource
 	}, nil, nil
 }
 
-func (o *teamBuilder) Grants(ctx context.Context, r *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	var annos annotations.Annotations
-	res, ratelimitDescription, err := o.client.ListWorkers(ctx, opts.PageToken.Token)
-	annos = *annos.WithRateLimiting(ratelimitDescription)
-	if err != nil {
-		return nil, &resourceSdk.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
-	}
-
-	rv := []*v2.Grant{}
-	for _, worker := range res.Results {
-		if worker.Status == "TERMINATED" {
-			continue
-		}
-		for _, teamId := range worker.TeamsID {
-			if teamId != r.Id.Resource {
-				continue
-			}
-
-			principalId, err := resourceSdk.NewResourceID(userResourceType, worker.UserID)
-			if err != nil {
-				return nil, &resourceSdk.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to create resource ID for user %s: %w", worker.UserID, err)
-			}
-			rv = append(rv, grant.NewGrant(
-				r,
-				teamMembership,
-				principalId,
-			))
-		}
-	}
-	return rv, &resourceSdk.SyncOpResults{
-		NextPageToken: res.NextLink,
-		Annotations:   annos,
-	}, nil
+// Grants always returns an empty slice for teams.
+// Team membership grants are emitted from the user Grants() method using cached worker data.
+func (o *teamBuilder) Grants(_ context.Context, _ *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func newTeamBuilder(client *client.Client) *teamBuilder {

@@ -10,8 +10,11 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/session"
+	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	"github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 )
 
 const workEmailType = "WORK"
@@ -233,9 +236,39 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 	return nil, nil, nil
 }
 
-// Grants always returns an empty slice for users since they don't have any entitlements.
-func (o *userBuilder) Grants(_ context.Context, _ *v2.Resource, _ resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
-	return nil, nil, nil
+// Grants returns team membership grants for this user by looking up the user's
+// worker record from the session store and creating a grant for each team.
+func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
+	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
+	if err != nil {
+		return nil, nil, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", r.Id.Resource, err)
+	}
+	if !found {
+		l := ctxzap.Extract(ctx)
+		l.Debug("no worker found for user, skipping team grants", zap.String("user_id", r.Id.Resource))
+		return nil, nil, nil
+	}
+	if worker.Status == "TERMINATED" {
+		l := ctxzap.Extract(ctx)
+		l.Debug("worker is terminated, skipping team grants", zap.String("user_id", r.Id.Resource))
+		return nil, nil, nil
+	}
+
+	rv := make([]*v2.Grant, 0, len(worker.TeamsID))
+	for _, teamID := range worker.TeamsID {
+		teamResourceID, err := resource.NewResourceID(teamResourceType, teamID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("baton-rippling: failed to create resource ID for team %s: %w", teamID, err)
+		}
+		teamResource := &v2.Resource{Id: teamResourceID}
+		rv = append(rv, grant.NewGrant(
+			teamResource,
+			teamMembership,
+			r.Id,
+		))
+	}
+
+	return rv, nil, nil
 }
 
 func newUserBuilder(client *client.Client) *userBuilder {
