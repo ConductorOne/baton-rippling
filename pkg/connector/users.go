@@ -121,10 +121,8 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 // keyed by user ID. On subsequent calls within the same sync, workers are read from
 // the session store instead of re-fetching from the API.
 func (o *userBuilder) fetchWorkers(ctx context.Context, ss sessions.SessionStore, annos *annotations.Annotations) (map[string]*client.Worker, error) {
-	cache := session.NewJSONSessionCache[client.Worker](ss)
-
 	// Check if workers have already been cached in the session store.
-	existing, _, err := cache.GetAll(ctx, "", sessions.WithPrefix(workersSessionPrefix))
+	existing, err := session.GetAllJSON[client.Worker](ctx, ss, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {
 		return nil, fmt.Errorf("baton-rippling: failed to read workers from session store: %w", err)
 	}
@@ -161,7 +159,7 @@ func (o *userBuilder) fetchWorkers(ctx context.Context, ss sessions.SessionStore
 
 	// Persist to session store for subsequent pages.
 	if len(toStore) > 0 {
-		if err := cache.SetMany(ctx, toStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
+		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
 			return nil, fmt.Errorf("baton-rippling: failed to store workers in session store: %w", err)
 		}
 	}

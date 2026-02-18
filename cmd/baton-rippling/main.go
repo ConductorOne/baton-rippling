@@ -29,6 +29,7 @@ func main() {
 		getConnector,
 		cfg.Config,
 		connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2(&connector.Connector{}),
+		connectorrunner.WithSessionStoreEnabled(),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
