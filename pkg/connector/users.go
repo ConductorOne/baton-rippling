@@ -17,6 +17,14 @@ import (
 const workEmailType = "WORK"
 const workersSessionPrefix = "workers"
 
+// Page token prefixes to distinguish the two phases of user List():
+// Phase 1 pages through workers, storing each page in the session store.
+// Phase 2 pages through users, looking up cached workers per-user.
+const (
+	workersPagePrefix = "w:"
+	usersPagePrefix   = "u:"
+)
+
 type userBuilder struct {
 	client *client.Client
 }
@@ -117,89 +125,92 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 	)
 }
 
-// fetchWorkers fetches all workers from the API and stores them in the session store,
-// keyed by user ID. On subsequent calls within the same sync, workers are read from
-// the session store instead of re-fetching from the API.
-func (o *userBuilder) fetchWorkers(ctx context.Context, ss sessions.SessionStore, annos *annotations.Annotations) (map[string]*client.Worker, error) {
-	// Check if workers have already been cached in the session store.
-	existing, err := session.GetAllJSON[client.Worker](ctx, ss, sessions.WithPrefix(workersSessionPrefix))
+// listWorkerPage fetches one page of workers from the API and stores them in
+// the session store. Returns no resources — this phase only populates the cache.
+func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+	var annos annotations.Annotations
+	workersResponse, ratelimitData, err := o.client.ListWorkers(ctx, pageToken)
+	annos = *annos.WithRateLimiting(ratelimitData)
 	if err != nil {
-		return nil, fmt.Errorf("baton-rippling: failed to read workers from session store: %w", err)
-	}
-	if len(existing) > 0 {
-		result := make(map[string]*client.Worker, len(existing))
-		for userID, worker := range existing {
-			w := worker
-			result[userID] = &w
-		}
-		return result, nil
+		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
 	}
 
-	// Fetch all pages of workers from the API.
-	toStore := make(map[string]client.Worker)
-	nextLink := ""
-	for {
-		workersResponse, workersRatelimitData, workersErr := o.client.ListWorkers(ctx, nextLink)
-		if workersRatelimitData != nil {
-			*annos = *annos.WithRateLimiting(workersRatelimitData)
+	toStore := make(map[string]client.Worker, len(workersResponse.Results))
+	for _, worker := range workersResponse.Results {
+		if worker.UserID != "" {
+			toStore[worker.UserID] = worker
 		}
-		if workersErr != nil {
-			return nil, fmt.Errorf("baton-rippling: failed to list workers: %w", workersErr)
-		}
-		for _, worker := range workersResponse.Results {
-			if worker.UserID != "" {
-				toStore[worker.UserID] = worker
-			}
-		}
-		if workersResponse.NextLink == "" {
-			break
-		}
-		nextLink = workersResponse.NextLink
 	}
-
-	// Persist to session store for subsequent pages.
 	if len(toStore) > 0 {
 		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
-			return nil, fmt.Errorf("baton-rippling: failed to store workers in session store: %w", err)
+			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store workers in session store: %w", err)
 		}
 	}
 
-	result := make(map[string]*client.Worker, len(toStore))
-	for userID, worker := range toStore {
-		w := worker
-		result[userID] = &w
+	// If more worker pages remain, stay in the workers phase.
+	// Otherwise transition to the users phase.
+	nextToken := usersPagePrefix
+	if workersResponse.NextLink != "" {
+		nextToken = workersPagePrefix + workersResponse.NextLink
 	}
-	return result, nil
+
+	return nil, &resource.SyncOpResults{
+		NextPageToken: nextToken,
+		Annotations:   annos,
+	}, nil
 }
 
-func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+// listUserPage fetches one page of users, enriching each with its cached worker data.
+func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
-	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, opts.PageToken.Token)
+	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pageToken)
 	annos = *annos.WithRateLimiting(ratelimitData)
 	if err != nil {
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list users: %w", err)
 	}
 
-	// Fetch workers from session store (or API on first call).
-	workersByUserID, err := o.fetchWorkers(ctx, opts.Session, &annos)
-	if err != nil {
-		return nil, &resource.SyncOpResults{Annotations: annos}, err
-	}
-
 	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
 	for _, user := range usersResponse.Results {
-		worker := workersByUserID[user.ID]
-		r, err := userResource(user, worker)
+		worker, found, err := session.GetJSON[client.Worker](ctx, ss, user.ID, sessions.WithPrefix(workersSessionPrefix))
+		if err != nil {
+			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", user.ID, err)
+		}
+
+		var workerPtr *client.Worker
+		if found {
+			workerPtr = &worker
+		}
+
+		r, err := userResource(user, workerPtr)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
 		rv = append(rv, r)
 	}
 
+	nextToken := ""
+	if usersResponse.NextLink != "" {
+		nextToken = usersPagePrefix + usersResponse.NextLink
+	}
+
 	return rv, &resource.SyncOpResults{
-		NextPageToken: usersResponse.NextLink,
+		NextPageToken: nextToken,
 		Annotations:   annos,
 	}, nil
+}
+
+func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
+	token := opts.PageToken.Token
+
+	switch {
+	case token == "" || strings.HasPrefix(token, workersPagePrefix):
+		// Phase 1: page through workers, storing each page in the session store.
+		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
+
+	default:
+		// Phase 2: page through users, looking up cached workers per-user.
+		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
+	}
 }
 
 func getWorkEmail(emails []client.Email) *client.Email {
