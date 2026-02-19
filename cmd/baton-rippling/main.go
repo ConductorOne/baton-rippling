@@ -46,13 +46,13 @@ func main() {
 	}
 }
 
-func getConnector(ctx context.Context, cfg2 *cfg.Rippling, runTimeOpts cli.RunTimeOpts) (types.ConnectorServer, error) {
+func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.RunTimeOpts) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
-	if err := field.Validate(cfg.Config, cfg2); err != nil {
+	if err := field.Validate(cfg.Config, config); err != nil {
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, cfg2.ApiToken)
+	cb, err := connector.New(ctx, config.ApiToken)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
