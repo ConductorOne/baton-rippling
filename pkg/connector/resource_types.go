@@ -17,4 +17,5 @@ var teamResourceType = &v2.ResourceType{
 	Id:          "team",
 	DisplayName: "Team",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+	Annotations: annotations.New(&v2.SkipGrants{}),
 }
