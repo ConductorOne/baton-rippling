@@ -172,15 +172,20 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list users: %w", err)
 	}
 
+	userIDs := make([]string, 0, len(usersResponse.Results))
+	for _, user := range usersResponse.Results {
+		userIDs = append(userIDs, user.ID)
+	}
+
+	workers, err := session.GetManyJSON[client.Worker](ctx, ss, userIDs, sessions.WithPrefix(workersSessionPrefix))
+	if err != nil {
+		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get workers from session store: %w", err)
+	}
+
 	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
 	for _, user := range usersResponse.Results {
-		worker, found, err := session.GetJSON[client.Worker](ctx, ss, user.ID, sessions.WithPrefix(workersSessionPrefix))
-		if err != nil {
-			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", user.ID, err)
-		}
-
 		var workerPtr *client.Worker
-		if found {
+		if worker, found := workers[user.ID]; found {
 			workerPtr = &worker
 		}
 
