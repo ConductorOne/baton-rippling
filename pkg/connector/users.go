@@ -97,6 +97,9 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		if worker.ManagerID != "" {
 			profile["manager_id"] = worker.ManagerID
 		}
+		if worker.Manager != nil && worker.Manager.WorkEmail != "" {
+			profile["manager_email"] = worker.Manager.WorkEmail
+		}
 
 		// Location information
 		if worker.Location != nil && worker.Location.WorkLocationID != "" {

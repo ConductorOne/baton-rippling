@@ -22,7 +22,7 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 	// Only add expand params on the initial request; next_link URLs already include them.
 	if nextLink == "" {
 		q := req.URL.Query()
-		q.Set("expand", "department,employment_type,level")
+		q.Set("expand", "department,employment_type,level,manager")
 		req.URL.RawQuery = q.Encode()
 	}
 
