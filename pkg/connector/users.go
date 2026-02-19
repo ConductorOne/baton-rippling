@@ -113,9 +113,21 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		return nil, fmt.Errorf("baton-rippling: failed to parse created_at for user %s: %w", user.ID, err)
 	}
 
+	// Derive user status from worker status.
+	var userStatus v2.UserTrait_Status_Status
+	if worker != nil {
+		switch worker.Status {
+		case "ACTIVE":
+			userStatus = v2.UserTrait_Status_STATUS_ENABLED
+		case "TERMINATED":
+			userStatus = v2.UserTrait_Status_STATUS_DISABLED
+		}
+	}
+
 	userOpts := []resource.UserTraitOption{
 		resource.WithUserProfile(profile),
 		resource.WithCreatedAt(createdAt),
+		resource.WithStatus(userStatus),
 	}
 
 	email := getWorkEmail(user.Emails)
