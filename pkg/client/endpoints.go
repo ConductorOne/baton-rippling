@@ -19,6 +19,15 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
+	// Only add expand params on the initial request; next_link URLs already include them.
+	if nextLink == "" {
+		if expand := c.buildExpandParam(); expand != "" {
+			q := req.URL.Query()
+			q.Set("expand", expand)
+			req.URL.RawQuery = q.Encode()
+		}
+	}
+
 	var ratelimitData v2.RateLimitDescription
 	var workers WorkersResponse
 	res, err := c.Do(

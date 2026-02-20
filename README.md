@@ -7,7 +7,28 @@
 Check out [Baton](https://github.com/conductorone/baton) to learn more the project in general.
 
 # Prerequisites
-No prerequisites were specified for `baton-rippling`
+
+## API Scopes
+
+The Rippling API token must have the following scopes:
+
+### Required
+
+| Scope | Description |
+|-------|-------------|
+| `workers.read` | Sync worker resources |
+| `users.read` | Sync user resources |
+| `teams.read` | Sync team resources |
+
+### Optional
+
+These scopes enable additional worker profile data via the corresponding `--expand-*` flags:
+
+| Scope | Flag |
+|-------|------|
+| `departments.read` | `--expand-department` |
+| `employment-types.read` | `--expand-employment-type` |
+| `levels.read` | `--expand-level` |
 
 # Getting Started
 

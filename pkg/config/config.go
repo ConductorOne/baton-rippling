@@ -12,7 +12,24 @@ var (
 		field.WithRequired(true),
 		field.WithIsSecret(true),
 	)
-	ConfigurationFields = []field.SchemaField{ApiToken}
+	ExpandDepartment = field.BoolField("expand-department",
+		field.WithDisplayName("Expand department"),
+		field.WithDescription("Include department data in worker sync. Requires the departments.read scope."),
+	)
+	ExpandEmploymentType = field.BoolField("expand-employment-type",
+		field.WithDisplayName("Expand employment type"),
+		field.WithDescription("Include employment type data in worker sync. Requires the employment-types.read scope."),
+	)
+	ExpandLevel = field.BoolField("expand-level",
+		field.WithDisplayName("Expand level"),
+		field.WithDescription("Include level data in worker sync. Requires the levels.read scope."),
+	)
+	ConfigurationFields = []field.SchemaField{
+		ApiToken,
+		ExpandDepartment,
+		ExpandEmploymentType,
+		ExpandLevel,
+	}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.
 	// For example, a username and password can be required together, or an access token can be

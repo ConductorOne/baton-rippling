@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/conductorone/baton-rippling/pkg/client"
 	cfg "github.com/conductorone/baton-rippling/pkg/config"
 	"github.com/conductorone/baton-rippling/pkg/connector"
+	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/connectorrunner"
@@ -23,12 +25,13 @@ var version = "dev"
 func main() {
 	ctx := context.Background()
 
-	_, cmd, err := config.DefineConfiguration(
+	_, cmd, err := config.DefineConfigurationV2(
 		ctx,
 		"baton-rippling",
 		getConnector,
 		cfg.Config,
-		connectorrunner.WithDefaultCapabilitiesConnectorBuilder(&connector.Connector{}),
+		connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2(&connector.Connector{}),
+		connectorrunner.WithSessionStoreEnabled(),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -44,22 +47,25 @@ func main() {
 	}
 }
 
-// TODO: After the config has been generated, update this function to use the config.
-func getConnector(ctx context.Context, config *cfg.Rippling) (types.ConnectorServer, error) {
+func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.RunTimeOpts) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
 	if err := field.Validate(cfg.Config, config); err != nil {
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, config.ApiToken)
+	cb, err := connector.New(ctx, config.ApiToken, client.ExpandOptions{
+		Department:     config.ExpandDepartment,
+		EmploymentType: config.ExpandEmploymentType,
+		Level:          config.ExpandLevel,
+	})
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
 	}
-	connector, err := connectorbuilder.NewConnector(ctx, cb)
+	c, err := connectorbuilder.NewConnector(ctx, cb, connectorbuilder.WithSessionStore(runTimeOpts.SessionStore))
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
 	}
-	return connector, nil
+	return c, nil
 }
