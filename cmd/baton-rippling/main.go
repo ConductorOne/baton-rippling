@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/conductorone/baton-rippling/pkg/client"
 	cfg "github.com/conductorone/baton-rippling/pkg/config"
 	"github.com/conductorone/baton-rippling/pkg/connector"
 	"github.com/conductorone/baton-sdk/pkg/cli"
@@ -52,7 +53,11 @@ func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.Run
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, config.ApiToken)
+	cb, err := connector.New(ctx, config.ApiToken, client.ExpandOptions{
+		Department:     config.ExpandDepartment,
+		EmploymentType: config.ExpandEmploymentType,
+		Level:          config.ExpandLevel,
+	})
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

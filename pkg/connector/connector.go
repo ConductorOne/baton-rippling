@@ -44,12 +44,12 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, apiToken string) (*Connector, error) {
-	client, err := client.New(ctx, apiToken)
+func New(ctx context.Context, apiToken string, expandOpts client.ExpandOptions) (*Connector, error) {
+	c, err := client.New(ctx, apiToken, expandOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 	return &Connector{
-		client: client,
+		client: c,
 	}, nil
 }
