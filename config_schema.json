@@ -103,6 +103,24 @@
           "isRequired": true
         }
       }
+    },
+    {
+      "name": "expand-department",
+      "displayName": "Expand department",
+      "description": "Include department data in worker sync. Requires the departments.read scope.",
+      "boolField": {}
+    },
+    {
+      "name": "expand-employment-type",
+      "displayName": "Expand employment type",
+      "description": "Include employment type data in worker sync. Requires the employment-types.read scope.",
+      "boolField": {}
+    },
+    {
+      "name": "expand-level",
+      "displayName": "Expand level",
+      "description": "Include level data in worker sync. Requires the levels.read scope.",
+      "boolField": {}
     }
   ],
   "displayName": "Rippling",
