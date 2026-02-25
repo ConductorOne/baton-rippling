@@ -57,7 +57,7 @@ func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.Run
 		Department:     config.ExpandDepartment,
 		EmploymentType: config.ExpandEmploymentType,
 		Level:          config.ExpandLevel,
-	})
+	}, config.ExpandWorkLocations)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

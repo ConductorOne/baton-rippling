@@ -19,24 +19,28 @@ import (
 
 const workEmailType = "WORK"
 const workersSessionPrefix = "workers"
+const workLocationsSessionPrefix = "work_locations"
 
-// Page token prefixes to distinguish the two phases of user List():
-// Phase 1 pages through workers, storing each page in the session store.
-// Phase 2 pages through users, looking up cached workers per-user.
+// Page token prefixes to distinguish the phases of user List():
+// Phase 1 (optional): pages through work locations, storing each in the session store.
+// Phase 2: pages through workers, storing each page in the session store.
+// Phase 3: pages through users, looking up cached workers and locations per-user.
 const (
-	workersPagePrefix = "w:"
-	usersPagePrefix   = "u:"
+	locationsPagePrefix = "l:"
+	workersPagePrefix   = "w:"
+	usersPagePrefix     = "u:"
 )
 
 type userBuilder struct {
-	client *client.Client
+	client             *client.Client
+	expandWorkLocations  bool
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User, worker *client.Worker) (*v2.Resource, error) {
+func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation) (*v2.Resource, error) {
 	profile := map[string]any{
 		"username": user.Username,
 		"active":   user.Active,
@@ -166,6 +170,34 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		}
 	}
 
+	// Work location details (from separate API call)
+	if workLocation != nil {
+		if workLocation.Name != "" {
+			profile["work_location_name"] = workLocation.Name
+		}
+		if workLocation.Address != nil {
+			addrMap := map[string]any{}
+			if workLocation.Address.Locality != "" {
+				addrMap["locality"] = workLocation.Address.Locality
+			}
+			if workLocation.Address.Region != "" {
+				addrMap["region"] = workLocation.Address.Region
+			}
+			if workLocation.Address.Country != "" {
+				addrMap["country"] = workLocation.Address.Country
+			}
+			if workLocation.Address.StreetAddress != "" {
+				addrMap["street_address"] = workLocation.Address.StreetAddress
+			}
+			if workLocation.Address.PostalCode != "" {
+				addrMap["postal_code"] = workLocation.Address.PostalCode
+			}
+			if len(addrMap) > 0 {
+				profile["work_location_address"] = addrMap
+			}
+		}
+	}
+
 	// convert to time.Time
 	createdAt, err := time.Parse(time.RFC3339, user.CreatedAt)
 	if err != nil {
@@ -200,6 +232,41 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		user.ID,
 		userOpts,
 	)
+}
+
+// listWorkLocationPage fetches one page of work locations from the API and
+// stores them in the session store. Returns no resources — this phase only populates the cache.
+func (o *userBuilder) listWorkLocationPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+	var annos annotations.Annotations
+	resp, ratelimitData, err := o.client.ListWorkLocations(ctx, pageToken)
+	annos = *annos.WithRateLimiting(ratelimitData)
+	if err != nil {
+		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list work locations: %w", err)
+	}
+
+	toStore := make(map[string]client.WorkLocation, len(resp.Results))
+	for _, loc := range resp.Results {
+		if loc.ID != "" {
+			toStore[loc.ID] = loc
+		}
+	}
+	if len(toStore) > 0 {
+		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workLocationsSessionPrefix)); err != nil {
+			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store work locations in session store: %w", err)
+		}
+	}
+
+	// If more pages remain, stay in the locations phase.
+	// Otherwise transition to the workers phase.
+	nextToken := workersPagePrefix
+	if resp.NextLink != "" {
+		nextToken = locationsPagePrefix + resp.NextLink
+	}
+
+	return nil, &resource.SyncOpResults{
+		NextPageToken: nextToken,
+		Annotations:   annos,
+	}, nil
 }
 
 // listWorkerPage fetches one page of workers from the API and stores them in
@@ -263,7 +330,18 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			workerPtr = &worker
 		}
 
-		r, err := userResource(user, workerPtr)
+		var workLocationPtr *client.WorkLocation
+		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
+			loc, found, locErr := session.GetJSON[client.WorkLocation](ctx, ss, workerPtr.Location.WorkLocationID, sessions.WithPrefix(workLocationsSessionPrefix))
+			if locErr != nil {
+				return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get work location from session store: %w", locErr)
+			}
+			if found {
+				workLocationPtr = &loc
+			}
+		}
+
+		r, err := userResource(user, workerPtr, workLocationPtr)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
@@ -285,12 +363,16 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 	token := opts.PageToken.Token
 
 	switch {
+	case o.expandWorkLocations && (token == "" || strings.HasPrefix(token, locationsPagePrefix)):
+		// Phase 1 (optional): page through work locations, storing each in the session store.
+		return o.listWorkLocationPage(ctx, strings.TrimPrefix(token, locationsPagePrefix), opts.Session)
+
 	case token == "" || strings.HasPrefix(token, workersPagePrefix):
-		// Phase 1: page through workers, storing each page in the session store.
+		// Phase 2: page through workers, storing each page in the session store.
 		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
 
 	default:
-		// Phase 2: page through users, looking up cached workers per-user.
+		// Phase 3: page through users, looking up cached workers and locations per-user.
 		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
 	}
 }
@@ -350,8 +432,9 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 	return rv, nil, nil
 }
 
-func newUserBuilder(client *client.Client) *userBuilder {
+func newUserBuilder(client *client.Client, expandWorkLocations bool) *userBuilder {
 	return &userBuilder{
-		client: client,
+		client:            client,
+		expandWorkLocations: expandWorkLocations,
 	}
 }

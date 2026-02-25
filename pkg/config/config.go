@@ -24,11 +24,16 @@ var (
 		field.WithDisplayName("Expand level"),
 		field.WithDescription("Include level data in worker sync. Requires the levels.read scope."),
 	)
+	ExpandWorkLocations = field.BoolField("expand-work-locations",
+		field.WithDisplayName("Expand work locations"),
+		field.WithDescription("Include work location name and address in user profiles. Requires the work-locations.read scope."),
+	)
 	ConfigurationFields = []field.SchemaField{
 		ApiToken,
 		ExpandDepartment,
 		ExpandEmploymentType,
 		ExpandLevel,
+		ExpandWorkLocations,
 	}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.

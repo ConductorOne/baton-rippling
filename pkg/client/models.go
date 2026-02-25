@@ -302,3 +302,17 @@ type WorkersResponse struct {
 	Results  []Worker `json:"results"`
 	NextLink string   `json:"next_link,omitempty"`
 }
+
+type WorkLocation struct {
+	ID        string   `json:"id"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+	Name      string   `json:"name"`
+	Address   *Address `json:"address,omitempty"`
+}
+
+type WorkLocationsResponse struct {
+	Meta     Meta           `json:"__meta"`
+	Results  []WorkLocation `json:"results"`
+	NextLink string         `json:"next_link,omitempty"`
+}

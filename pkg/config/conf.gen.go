@@ -8,6 +8,7 @@ type Rippling struct {
 	ExpandDepartment bool `mapstructure:"expand-department"`
 	ExpandEmploymentType bool `mapstructure:"expand-employment-type"`
 	ExpandLevel bool `mapstructure:"expand-level"`
+	ExpandWorkLocations bool `mapstructure:"expand-work-locations"`
 }
 
 func (c *Rippling) findFieldByTag(tagValue string) (any, bool) {
