@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/conductorone/baton-rippling/pkg/client"
+	"github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -222,18 +223,41 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 	}
 
 	r, err := userResource(user, worker, nil)
-	assert.NoError(t, err)
-
-	// Extract profile from annotations
-	userTrait := r.GetAnnotations()
-	assert.NotNil(t, userTrait)
-
-	// Verify the resource was created with the right display name
+	if !assert.NoError(t, err) {
+		return
+	}
 	assert.Equal(t, "Grace Hopper", r.DisplayName)
-
-	// Verify the resource was created successfully (profile is in annotations,
-	// we trust the implementation above sets them correctly based on the code).
 	assert.Equal(t, "user-7", r.Id.Resource)
+
+	// Extract profile and verify address deduplication
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	profileFields := trait.GetProfile().GetFields()
+	addressesVal := profileFields["addresses"].GetStructValue()
+	if !assert.NotNil(t, addressesVal) {
+		return
+	}
+
+	// First WORK address should be kept
+	workAddr := addressesVal.GetFields()["work"].GetStructValue()
+	if assert.NotNil(t, workAddr, "expected work address in profile") {
+		assert.Equal(t, "Arlington", workAddr.GetFields()["locality"].GetStringValue())
+		assert.Equal(t, "VA", workAddr.GetFields()["region"].GetStringValue())
+		assert.Equal(t, "US", workAddr.GetFields()["country"].GetStringValue())
+
+		// Second WORK address (Washington, DC) should NOT appear — first one wins
+		assert.NotEqual(t, "Washington", workAddr.GetFields()["locality"].GetStringValue())
+		assert.NotEqual(t, "DC", workAddr.GetFields()["region"].GetStringValue())
+	}
+
+	// HOME address should also be present
+	homeAddr := addressesVal.GetFields()["home"].GetStructValue()
+	if assert.NotNil(t, homeAddr, "expected home address in profile") {
+		assert.Equal(t, "New York", homeAddr.GetFields()["locality"].GetStringValue())
+	}
 }
 
 func TestUserResource_AddressWithEmptyType(t *testing.T) {
@@ -313,8 +337,28 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 	}
 
 	r, err := userResource(user, worker, workLocation)
-	assert.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	assert.Equal(t, "Kate Walsh", r.DisplayName)
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "New York Office", fields["work_location_name"].GetStringValue())
+
+	addrVal := fields["work_location_address"].GetStructValue()
+	if assert.NotNil(t, addrVal, "expected work_location_address in profile") {
+		addrFields := addrVal.GetFields()
+		assert.Equal(t, "350 Fifth Ave", addrFields["street_address"].GetStringValue())
+		assert.Equal(t, "New York", addrFields["locality"].GetStringValue())
+		assert.Equal(t, "NY", addrFields["region"].GetStringValue())
+		assert.Equal(t, "10118", addrFields["postal_code"].GetStringValue())
+		assert.Equal(t, "US", addrFields["country"].GetStringValue())
+	}
 }
 
 func TestUserResource_NilWorkLocation(t *testing.T) {
@@ -359,8 +403,19 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 	}
 
 	r, err := userResource(user, worker, workLocation)
-	assert.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	assert.Equal(t, "Maya Chen", r.DisplayName)
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "Remote", fields["work_location_name"].GetStringValue())
+	assert.Nil(t, fields["work_location_address"], "expected no work_location_address when address is nil")
 }
 
 func TestUserResource_InvalidCreatedAt(t *testing.T) {
