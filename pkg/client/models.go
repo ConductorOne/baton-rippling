@@ -28,7 +28,13 @@ type Photo struct {
 }
 
 type Name struct {
-	DisplayName string `json:"display_name"`
+	Formatted           string `json:"formatted,omitempty"`
+	GivenName           string `json:"given_name,omitempty"`
+	MiddleName          string `json:"middle_name,omitempty"`
+	FamilyName          string `json:"family_name,omitempty"`
+	PreferredGivenName  string `json:"preferred_given_name,omitempty"`
+	PreferredFamilyName string `json:"preferred_family_name,omitempty"`
+	DisplayName         string `json:"display_name"`
 }
 
 type User struct {
@@ -78,23 +84,13 @@ type TeamsResponse struct {
 	NextLink string `json:"next_link,omitempty"`
 }
 
-type WorkerName struct {
-	Formatted           string `json:"formatted,omitempty"`
-	GivenName           string `json:"given_name,omitempty"`
-	MiddleName          string `json:"middle_name,omitempty"`
-	FamilyName          string `json:"family_name,omitempty"`
-	PreferredGivenName  string `json:"preferred_given_name,omitempty"`
-	PreferredFamilyName string `json:"preferred_family_name,omitempty"`
-	DisplayName         string `json:"display_name,omitempty"`
-}
-
 type WorkerUser struct {
 	ID                string        `json:"id"`
 	CreatedAt         string        `json:"created_at"`
 	UpdatedAt         string        `json:"updated_at"`
 	Active            bool          `json:"active,omitempty"`
 	Username          string        `json:"username,omitempty"`
-	Name              WorkerName    `json:"name,omitempty"`
+	Name              Name          `json:"name,omitempty"`
 	Emails            []Email       `json:"emails,omitempty"`
 	PhoneNumbers      []PhoneNumber `json:"phone_numbers,omitempty"`
 	Addresses         []Address     `json:"addresses,omitempty"`
