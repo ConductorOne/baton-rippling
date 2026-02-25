@@ -43,6 +43,62 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		"locale":   user.Locale,
 	}
 
+	// Name fields from User
+	if user.Name.GivenName != "" {
+		profile["given_name"] = user.Name.GivenName
+	}
+	if user.Name.FamilyName != "" {
+		profile["family_name"] = user.Name.FamilyName
+	}
+	if user.Name.MiddleName != "" {
+		profile["middle_name"] = user.Name.MiddleName
+	}
+	if user.Name.Formatted != "" {
+		profile["formatted_name"] = user.Name.Formatted
+	}
+	if user.Name.PreferredGivenName != "" {
+		profile["preferred_given_name"] = user.Name.PreferredGivenName
+	}
+	if user.Name.PreferredFamilyName != "" {
+		profile["preferred_family_name"] = user.Name.PreferredFamilyName
+	}
+
+	// Address fields from User, grouped by type
+	if len(user.Addresses) > 0 {
+		addresses := map[string]any{}
+		for _, addr := range user.Addresses {
+			addrType := strings.ToLower(addr.Type)
+			if addrType == "" {
+				addrType = "other"
+			}
+			if _, exists := addresses[addrType]; exists {
+				continue // keep first of each type
+			}
+			addrMap := map[string]any{}
+			if addr.Locality != "" {
+				addrMap["locality"] = addr.Locality
+			}
+			if addr.Region != "" {
+				addrMap["region"] = addr.Region
+			}
+			if addr.Country != "" {
+				addrMap["country"] = addr.Country
+			}
+			if addr.StreetAddress != "" {
+				addrMap["street_address"] = addr.StreetAddress
+			}
+			if addr.PostalCode != "" {
+				addrMap["postal_code"] = addr.PostalCode
+			}
+			if len(addrMap) > 0 {
+				addresses[addrType] = addrMap
+			}
+		}
+		if len(addresses) > 0 {
+			profile["addresses"] = addresses
+		}
+	}
+
 	// Add worker-related attributes if available
 	if worker != nil {
 		// Employment information
@@ -83,6 +139,9 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		}
 
 		// Department information
+		if worker.DepartmentID != "" {
+			profile["department_id"] = worker.DepartmentID
+		}
 		if worker.Department != nil && worker.Department.Name != "" {
 			profile["department"] = worker.Department.Name
 		}
