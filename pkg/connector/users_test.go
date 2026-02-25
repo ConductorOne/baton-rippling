@@ -25,7 +25,7 @@ func TestUserResource_NoWorker(t *testing.T) {
 		Emails: []client.Email{{Value: "alice@example.com"}},
 	}
 
-	r, err := userResource(user, nil)
+	r, err := userResource(user, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Alice Smith", r.DisplayName)
 	assert.Equal(t, "user-1", r.Id.Resource)
@@ -93,7 +93,7 @@ func TestUserResource_WithFullWorker(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker)
+	r, err := userResource(user, worker, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Bob Jones", r.DisplayName)
 	assert.Equal(t, "user-2", r.Id.Resource)
@@ -121,7 +121,7 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 		Location:       nil,
 	}
 
-	r, err := userResource(user, worker)
+	r, err := userResource(user, worker, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Carol Lee", r.DisplayName)
 }
@@ -151,7 +151,7 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 		Location:   &client.Location{WorkLocationID: ""},
 	}
 
-	r, err := userResource(user, worker)
+	r, err := userResource(user, worker, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Dave Kim", r.DisplayName)
 }
@@ -167,7 +167,7 @@ func TestUserResource_NoEmails(t *testing.T) {
 		Emails:    nil,
 	}
 
-	r, err := userResource(user, nil)
+	r, err := userResource(user, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Eve Wu", r.DisplayName)
 }
@@ -221,7 +221,7 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 		Department:   &client.Department{Name: "R&D"},
 	}
 
-	r, err := userResource(user, worker)
+	r, err := userResource(user, worker, nil)
 	assert.NoError(t, err)
 
 	// Extract profile from annotations
@@ -255,7 +255,7 @@ func TestUserResource_AddressWithEmptyType(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil)
+	r, err := userResource(user, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Hank Hill", r.DisplayName)
 }
@@ -277,9 +277,90 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil)
+	r, err := userResource(user, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Irene Adler", r.DisplayName)
+}
+
+func TestUserResource_WithWorkLocation(t *testing.T) {
+	user := client.User{
+		ID:        "user-10",
+		Username:  "kate",
+		Active:    true,
+		Locale:    "en-US",
+		CreatedAt: "2024-01-01T00:00:00Z",
+		Name:      client.Name{DisplayName: "Kate Walsh"},
+		Emails:    []client.Email{{Value: "kate@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-10",
+		UserID: "user-10",
+		Status: "ACTIVE",
+		Location: &client.Location{
+			WorkLocationID: "loc-nyc",
+		},
+	}
+	workLocation := &client.WorkLocation{
+		ID:   "loc-nyc",
+		Name: "New York Office",
+		Address: &client.Address{
+			StreetAddress: "350 Fifth Ave",
+			Locality:      "New York",
+			Region:        "NY",
+			PostalCode:    "10118",
+			Country:       "US",
+		},
+	}
+
+	r, err := userResource(user, worker, workLocation)
+	assert.NoError(t, err)
+	assert.Equal(t, "Kate Walsh", r.DisplayName)
+}
+
+func TestUserResource_NilWorkLocation(t *testing.T) {
+	user := client.User{
+		ID:        "user-11",
+		Username:  "leo",
+		Active:    true,
+		Locale:    "en-US",
+		CreatedAt: "2024-01-01T00:00:00Z",
+		Name:      client.Name{DisplayName: "Leo Park"},
+		Emails:    []client.Email{{Value: "leo@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-11",
+		UserID: "user-11",
+		Status: "ACTIVE",
+	}
+
+	r, err := userResource(user, worker, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "Leo Park", r.DisplayName)
+}
+
+func TestUserResource_WorkLocationNameOnly(t *testing.T) {
+	user := client.User{
+		ID:        "user-12",
+		Username:  "maya",
+		Active:    true,
+		Locale:    "en-US",
+		CreatedAt: "2024-01-01T00:00:00Z",
+		Name:      client.Name{DisplayName: "Maya Chen"},
+		Emails:    []client.Email{{Value: "maya@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-12",
+		UserID: "user-12",
+		Status: "ACTIVE",
+	}
+	workLocation := &client.WorkLocation{
+		ID:   "loc-remote",
+		Name: "Remote",
+	}
+
+	r, err := userResource(user, worker, workLocation)
+	assert.NoError(t, err)
+	assert.Equal(t, "Maya Chen", r.DisplayName)
 }
 
 func TestUserResource_InvalidCreatedAt(t *testing.T) {
@@ -291,7 +372,7 @@ func TestUserResource_InvalidCreatedAt(t *testing.T) {
 		Name:      client.Name{DisplayName: "Frank"},
 	}
 
-	_, err := userResource(user, nil)
+	_, err := userResource(user, nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse created_at")
 }
