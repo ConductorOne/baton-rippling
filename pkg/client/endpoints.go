@@ -84,6 +84,39 @@ func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse
 	return &teams, &ratelimitData, nil
 }
 
+func (c *Client) ListWorkLocations(ctx context.Context, nextLink string) (*WorkLocationsResponse, *v2.RateLimitDescription, error) {
+	url := WorkLocationsURL
+	if nextLink != "" {
+		url = nextLink
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	var ratelimitData v2.RateLimitDescription
+	var workLocations WorkLocationsResponse
+	res, err := c.Do(
+		req,
+		uhttp.WithJSONResponse(&workLocations),
+		uhttp.WithRatelimitData(&ratelimitData),
+	)
+	if err != nil {
+		if res != nil {
+			logBody(ctx, res.Body)
+		}
+		return nil, &ratelimitData, fmt.Errorf("failed to list work locations: %w", err)
+	}
+
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		logBody(ctx, res.Body)
+		return nil, &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+	}
+
+	return &workLocations, &ratelimitData, nil
+}
+
 func (c *Client) ListUsers(ctx context.Context, nextLink string) (*UsersResponse, *v2.RateLimitDescription, error) {
 	url := UsersURL
 	if nextLink != "" {
