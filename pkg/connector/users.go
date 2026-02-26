@@ -117,20 +117,8 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		}
 
 		// Employment type information
-		if worker.EmploymentType != nil {
-			employmentType := map[string]any{}
-			if worker.EmploymentType.Label != "" {
-				employmentType["label"] = worker.EmploymentType.Label
-			}
-			if worker.EmploymentType.Name != "" {
-				employmentType["name"] = worker.EmploymentType.Name
-			}
-			if worker.EmploymentType.Type != "" {
-				employmentType["type"] = worker.EmploymentType.Type
-			}
-			if len(employmentType) > 0 {
-				profile["employment_type"] = employmentType
-			}
+		if worker.EmploymentType != nil && worker.EmploymentType.Type != "" {
+			profile["employment_type"] = worker.EmploymentType.Type
 		}
 
 		// Department information
