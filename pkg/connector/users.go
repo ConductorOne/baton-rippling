@@ -67,40 +67,31 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		profile["preferred_family_name"] = user.Name.PreferredFamilyName
 	}
 
-	// Address fields from User, grouped by type
-	if len(user.Addresses) > 0 {
-		addresses := map[string]any{}
-		for _, addr := range user.Addresses {
-			addrType := strings.ToLower(addr.Type)
-			if addrType == "" {
-				addrType = "other"
-			}
-			if _, exists := addresses[addrType]; exists {
-				continue // keep first of each type
-			}
-			addrMap := map[string]any{}
-			if addr.Locality != "" {
-				addrMap["locality"] = addr.Locality
-			}
-			if addr.Region != "" {
-				addrMap["region"] = addr.Region
-			}
-			if addr.Country != "" {
-				addrMap["country"] = addr.Country
-			}
-			if addr.StreetAddress != "" {
-				addrMap["street_address"] = addr.StreetAddress
-			}
-			if addr.PostalCode != "" {
-				addrMap["postal_code"] = addr.PostalCode
-			}
-			if len(addrMap) > 0 {
-				addresses[addrType] = addrMap
-			}
+	// Work address from User (first WORK-type address wins)
+	for _, addr := range user.Addresses {
+		if !strings.EqualFold(addr.Type, workEmailType) {
+			continue
 		}
-		if len(addresses) > 0 {
-			profile["addresses"] = addresses
+		addrMap := map[string]any{}
+		if addr.Locality != "" {
+			addrMap["locality"] = addr.Locality
 		}
+		if addr.Region != "" {
+			addrMap["region"] = addr.Region
+		}
+		if addr.Country != "" {
+			addrMap["country"] = addr.Country
+		}
+		if addr.StreetAddress != "" {
+			addrMap["street_address"] = addr.StreetAddress
+		}
+		if addr.PostalCode != "" {
+			addrMap["postal_code"] = addr.PostalCode
+		}
+		if len(addrMap) > 0 {
+			profile["address"] = addrMap
+		}
+		break
 	}
 
 	// Add worker-related attributes if available

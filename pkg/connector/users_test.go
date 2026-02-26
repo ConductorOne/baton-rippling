@@ -229,38 +229,27 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 	assert.Equal(t, "Grace Hopper", r.DisplayName)
 	assert.Equal(t, "user-7", r.Id.Resource)
 
-	// Extract profile and verify address deduplication
+	// Extract profile and verify only the first WORK address is used
 	trait, err := resource.GetUserTrait(r)
 	if !assert.NoError(t, err) {
 		return
 	}
 
 	profileFields := trait.GetProfile().GetFields()
-	addressesVal := profileFields["addresses"].GetStructValue()
-	if !assert.NotNil(t, addressesVal) {
-		return
-	}
-
-	// First WORK address should be kept
-	workAddr := addressesVal.GetFields()["work"].GetStructValue()
-	if assert.NotNil(t, workAddr, "expected work address in profile") {
-		assert.Equal(t, "Arlington", workAddr.GetFields()["locality"].GetStringValue())
-		assert.Equal(t, "VA", workAddr.GetFields()["region"].GetStringValue())
-		assert.Equal(t, "US", workAddr.GetFields()["country"].GetStringValue())
+	addrVal := profileFields["address"].GetStructValue()
+	if assert.NotNil(t, addrVal, "expected address in profile") {
+		// First WORK address should be kept
+		assert.Equal(t, "Arlington", addrVal.GetFields()["locality"].GetStringValue())
+		assert.Equal(t, "VA", addrVal.GetFields()["region"].GetStringValue())
+		assert.Equal(t, "US", addrVal.GetFields()["country"].GetStringValue())
 
 		// Second WORK address (Washington, DC) should NOT appear — first one wins
-		assert.NotEqual(t, "Washington", workAddr.GetFields()["locality"].GetStringValue())
-		assert.NotEqual(t, "DC", workAddr.GetFields()["region"].GetStringValue())
-	}
-
-	// HOME address should also be present
-	homeAddr := addressesVal.GetFields()["home"].GetStructValue()
-	if assert.NotNil(t, homeAddr, "expected home address in profile") {
-		assert.Equal(t, "New York", homeAddr.GetFields()["locality"].GetStringValue())
+		assert.NotEqual(t, "Washington", addrVal.GetFields()["locality"].GetStringValue())
+		assert.NotEqual(t, "DC", addrVal.GetFields()["region"].GetStringValue())
 	}
 }
 
-func TestUserResource_AddressWithEmptyType(t *testing.T) {
+func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 	user := client.User{
 		ID:        "user-8",
 		Username:  "hank",
@@ -271,7 +260,7 @@ func TestUserResource_AddressWithEmptyType(t *testing.T) {
 		Emails:    []client.Email{{Value: "hank@example.com"}},
 		Addresses: []client.Address{
 			{
-				Type:     "",
+				Type:     "HOME",
 				Locality: "Arlen",
 				Region:   "TX",
 				Country:  "US",
@@ -280,8 +269,17 @@ func TestUserResource_AddressWithEmptyType(t *testing.T) {
 	}
 
 	r, err := userResource(user, nil, nil)
-	assert.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	assert.Equal(t, "Hank Hill", r.DisplayName)
+
+	// Non-WORK addresses should not produce an address field
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Nil(t, trait.GetProfile().GetFields()["address"], "expected no address for non-WORK type")
 }
 
 func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
