@@ -9,6 +9,40 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 )
 
+// doGet performs a GET request to the given URL (or nextLink if non-empty),
+// deserializes the JSON response into target, and returns rate limit data.
+func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any) (*v2.RateLimitDescription, error) {
+	url := baseURL
+	if nextLink != "" {
+		url = nextLink
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	var ratelimitData v2.RateLimitDescription
+	res, err := c.Do(
+		req,
+		uhttp.WithJSONResponse(target),
+		uhttp.WithRatelimitData(&ratelimitData),
+	)
+	if err != nil {
+		if res != nil {
+			logBody(ctx, res.Body)
+		}
+		return &ratelimitData, fmt.Errorf("request to %s failed: %w", baseURL, err)
+	}
+
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		logBody(ctx, res.Body)
+		return &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+	}
+
+	return &ratelimitData, nil
+}
+
 func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResponse, *v2.RateLimitDescription, error) {
 	url := WorkersURL
 	if nextLink != "" {
@@ -52,100 +86,28 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 }
 
 func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse, *v2.RateLimitDescription, error) {
-	url := TeamsURL
-	if nextLink != "" {
-		url = nextLink
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	var ratelimitData v2.RateLimitDescription
 	var teams TeamsResponse
-	res, err := c.Do(
-		req,
-		uhttp.WithJSONResponse(&teams),
-		uhttp.WithRatelimitData(&ratelimitData),
-	)
+	rl, err := c.doGet(ctx, TeamsURL, nextLink, &teams)
 	if err != nil {
-		if res != nil {
-			logBody(ctx, res.Body)
-		}
-		return nil, &ratelimitData, fmt.Errorf("failed to list teams: %w", err)
+		return nil, rl, fmt.Errorf("failed to list teams: %w", err)
 	}
-
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		logBody(ctx, res.Body)
-		return nil, &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
-	}
-
-	return &teams, &ratelimitData, nil
+	return &teams, rl, nil
 }
 
 func (c *Client) ListWorkLocations(ctx context.Context, nextLink string) (*WorkLocationsResponse, *v2.RateLimitDescription, error) {
-	url := WorkLocationsURL
-	if nextLink != "" {
-		url = nextLink
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	var ratelimitData v2.RateLimitDescription
 	var workLocations WorkLocationsResponse
-	res, err := c.Do(
-		req,
-		uhttp.WithJSONResponse(&workLocations),
-		uhttp.WithRatelimitData(&ratelimitData),
-	)
+	rl, err := c.doGet(ctx, WorkLocationsURL, nextLink, &workLocations)
 	if err != nil {
-		if res != nil {
-			logBody(ctx, res.Body)
-		}
-		return nil, &ratelimitData, fmt.Errorf("failed to list work locations: %w", err)
+		return nil, rl, fmt.Errorf("failed to list work locations: %w", err)
 	}
-
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		logBody(ctx, res.Body)
-		return nil, &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
-	}
-
-	return &workLocations, &ratelimitData, nil
+	return &workLocations, rl, nil
 }
 
 func (c *Client) ListUsers(ctx context.Context, nextLink string) (*UsersResponse, *v2.RateLimitDescription, error) {
-	url := UsersURL
-	if nextLink != "" {
-		url = nextLink
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	var ratelimitData v2.RateLimitDescription
 	var usersResponse UsersResponse
-	res, err := c.Do(
-		req,
-		uhttp.WithJSONResponse(&usersResponse),
-		uhttp.WithRatelimitData(&ratelimitData),
-	)
+	rl, err := c.doGet(ctx, UsersURL, nextLink, &usersResponse)
 	if err != nil {
-		if res != nil {
-			logBody(ctx, res.Body)
-		}
-		return nil, &ratelimitData, fmt.Errorf("failed to list users: %w", err)
+		return nil, rl, fmt.Errorf("failed to list users: %w", err)
 	}
-
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		logBody(ctx, res.Body)
-		return nil, &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
-	}
-
-	return &usersResponse, &ratelimitData, nil
+	return &usersResponse, rl, nil
 }
