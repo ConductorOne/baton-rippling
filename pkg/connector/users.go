@@ -317,6 +317,27 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get workers from session store: %w", err)
 	}
 
+	// Batch-fetch work locations for all workers on this page.
+	var workLocations map[string]client.WorkLocation
+	if o.expandWorkLocations {
+		locationIDs := make([]string, 0)
+		seen := make(map[string]bool)
+		for _, user := range usersResponse.Results {
+			if worker, found := workers[user.ID]; found {
+				if worker.Location != nil && worker.Location.WorkLocationID != "" && !seen[worker.Location.WorkLocationID] {
+					locationIDs = append(locationIDs, worker.Location.WorkLocationID)
+					seen[worker.Location.WorkLocationID] = true
+				}
+			}
+		}
+		if len(locationIDs) > 0 {
+			workLocations, err = session.GetManyJSON[client.WorkLocation](ctx, ss, locationIDs, sessions.WithPrefix(workLocationsSessionPrefix))
+			if err != nil {
+				return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get work locations from session store: %w", err)
+			}
+		}
+	}
+
 	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
 	for _, user := range usersResponse.Results {
 		var workerPtr *client.Worker
@@ -326,12 +347,8 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 
 		var workLocationPtr *client.WorkLocation
 		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
-			loc, found, locErr := session.GetJSON[client.WorkLocation](ctx, ss, workerPtr.Location.WorkLocationID, sessions.WithPrefix(workLocationsSessionPrefix))
-			if locErr != nil {
-				return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get work location from session store: %w", locErr)
-			}
-			if found {
-				workLocationPtr = &loc
+			if wl, ok := workLocations[workerPtr.Location.WorkLocationID]; ok {
+				workLocationPtr = &wl
 			}
 		}
 
