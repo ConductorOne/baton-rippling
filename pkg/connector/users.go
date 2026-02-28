@@ -91,6 +91,15 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		if len(addrMap) > 0 {
 			profile["address"] = addrMap
 		}
+		if addr.Locality != "" {
+			profile["locality"] = addr.Locality
+		}
+		if addr.Region != "" {
+			profile["region"] = addr.Region
+		}
+		if addr.Country != "" {
+			profile["country"] = addr.Country
+		}
 		break
 	}
 
@@ -111,9 +120,6 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		}
 		if worker.WorkEmail != "" {
 			profile["work_email"] = worker.WorkEmail
-		}
-		if worker.Country != "" {
-			profile["country"] = worker.Country
 		}
 
 		// Employment type information
@@ -173,6 +179,15 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 			}
 			if len(addrMap) > 0 {
 				profile["work_location_address"] = addrMap
+			}
+			if workLocation.Address.Locality != "" {
+				profile["locality"] = workLocation.Address.Locality
+			}
+			if workLocation.Address.Region != "" {
+				profile["region"] = workLocation.Address.Region
+			}
+			if workLocation.Address.Country != "" {
+				profile["country"] = workLocation.Address.Country
 			}
 		}
 	}
