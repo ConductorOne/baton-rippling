@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const workEmailType = "WORK"
+const workType = "WORK"
 const workersSessionPrefix = "workers"
 const workLocationsSessionPrefix = "work_locations"
 
@@ -32,8 +32,8 @@ const (
 )
 
 type userBuilder struct {
-	client             *client.Client
-	expandWorkLocations  bool
+	client              *client.Client
+	expandWorkLocations bool
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
@@ -69,7 +69,7 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 
 	// Work address from User (first WORK-type address wins)
 	for _, addr := range user.Addresses {
-		if !strings.EqualFold(addr.Type, workEmailType) {
+		if !strings.EqualFold(addr.Type, workType) {
 			continue
 		}
 		addrMap := map[string]any{}
@@ -217,7 +217,7 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 
 	email := getWorkEmail(user.Emails)
 	if email != nil {
-		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workEmailType)))
+		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workType)))
 	}
 
 	return resource.NewUserResource(
@@ -374,7 +374,7 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 func getWorkEmail(emails []client.Email) *client.Email {
 	var workEmail *client.Email
 	for _, e := range emails {
-		if strings.EqualFold(e.Type, workEmailType) {
+		if strings.EqualFold(e.Type, workType) {
 			return &e
 		}
 
@@ -428,7 +428,7 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 
 func newUserBuilder(client *client.Client, expandWorkLocations bool) *userBuilder {
 	return &userBuilder{
-		client:            client,
+		client:              client,
 		expandWorkLocations: expandWorkLocations,
 	}
 }
