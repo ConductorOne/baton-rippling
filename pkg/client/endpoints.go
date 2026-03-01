@@ -44,7 +44,7 @@ func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any
 }
 
 func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResponse, *v2.RateLimitDescription, error) {
-	url := WorkersURL
+	url := c.workersURL()
 	if nextLink != "" {
 		url = nextLink
 	}
@@ -87,7 +87,7 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 
 func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse, *v2.RateLimitDescription, error) {
 	var teams TeamsResponse
-	rl, err := c.doGet(ctx, TeamsURL, nextLink, &teams)
+	rl, err := c.doGet(ctx, c.teamsURL(), nextLink, &teams)
 	if err != nil {
 		return nil, rl, fmt.Errorf("failed to list teams: %w", err)
 	}
@@ -96,7 +96,7 @@ func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse
 
 func (c *Client) ListWorkLocations(ctx context.Context, nextLink string) (*WorkLocationsResponse, *v2.RateLimitDescription, error) {
 	var workLocations WorkLocationsResponse
-	rl, err := c.doGet(ctx, WorkLocationsURL, nextLink, &workLocations)
+	rl, err := c.doGet(ctx, c.workLocationsURL(), nextLink, &workLocations)
 	if err != nil {
 		return nil, rl, fmt.Errorf("failed to list work locations: %w", err)
 	}
@@ -105,7 +105,7 @@ func (c *Client) ListWorkLocations(ctx context.Context, nextLink string) (*WorkL
 
 func (c *Client) ListUsers(ctx context.Context, nextLink string) (*UsersResponse, *v2.RateLimitDescription, error) {
 	var usersResponse UsersResponse
-	rl, err := c.doGet(ctx, UsersURL, nextLink, &usersResponse)
+	rl, err := c.doGet(ctx, c.usersURL(), nextLink, &usersResponse)
 	if err != nil {
 		return nil, rl, fmt.Errorf("failed to list users: %w", err)
 	}
