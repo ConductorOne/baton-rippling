@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/conductorone/baton-rippling/pkg/client"
 	"github.com/conductorone/baton-sdk/pkg/field"
 )
 
@@ -11,6 +12,12 @@ var (
 		field.WithDescription("The API token for the Rippling connector. This is used to authenticate API requests."),
 		field.WithRequired(true),
 		field.WithIsSecret(true),
+	)
+	BaseURL = field.StringField("base-url",
+		field.WithDisplayName("Base URL"),
+		field.WithDescription("The base URL for the Rippling API."),
+		field.WithDefaultValue(client.DefaultBaseURL),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
 	)
 	ExpandDepartment = field.BoolField("expand-department",
 		field.WithDisplayName("Expand department"),
@@ -30,6 +37,7 @@ var (
 	)
 	ConfigurationFields = []field.SchemaField{
 		ApiToken,
+		BaseURL,
 		ExpandDepartment,
 		ExpandEmploymentType,
 		ExpandLevel,

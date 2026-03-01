@@ -17,10 +17,13 @@ type ExpandOptions struct {
 
 type Client struct {
 	*uhttp.BaseHttpClient
+	baseURL       string
 	expandOptions ExpandOptions
 }
 
-func New(ctx context.Context, apiToken string, expandOpts ExpandOptions) (*Client, error) {
+func New(ctx context.Context, apiToken string, baseURL string, expandOpts ExpandOptions) (*Client, error) {
+	baseURL = strings.TrimRight(baseURL, "/")
+
 	client, err := uhttp.NewBearerAuth(apiToken).GetClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
@@ -28,9 +31,15 @@ func New(ctx context.Context, apiToken string, expandOpts ExpandOptions) (*Clien
 
 	return &Client{
 		BaseHttpClient: uhttp.NewBaseHttpClient(client),
+		baseURL:        baseURL,
 		expandOptions:  expandOpts,
 	}, nil
 }
+
+func (c *Client) usersURL() string         { return c.baseURL + usersPath }
+func (c *Client) teamsURL() string         { return c.baseURL + teamsPath }
+func (c *Client) workersURL() string       { return c.baseURL + workersPath }
+func (c *Client) workLocationsURL() string { return c.baseURL + workLocationsPath }
 
 func (c *Client) buildExpandParam() string {
 	// Manager is always expanded since it only requires the workers.read scope
