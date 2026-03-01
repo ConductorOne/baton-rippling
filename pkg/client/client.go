@@ -22,6 +22,9 @@ type Client struct {
 }
 
 func New(ctx context.Context, apiToken string, baseURL string, expandOpts ExpandOptions) (*Client, error) {
+	if baseURL == "" {
+		baseURL = DefaultBaseURL
+	}
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	client, err := uhttp.NewBearerAuth(apiToken).GetClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
