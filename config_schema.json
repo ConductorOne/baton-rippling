@@ -121,6 +121,12 @@
       "displayName": "Expand level",
       "description": "Include level data in worker sync. Requires the levels.read scope.",
       "boolField": {}
+    },
+    {
+      "name": "expand-work-locations",
+      "displayName": "Expand work locations",
+      "description": "Include work location name and address in user profiles. Requires the work-locations.read scope.",
+      "boolField": {}
     }
   ],
   "displayName": "Rippling",
