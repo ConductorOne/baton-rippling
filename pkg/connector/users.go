@@ -75,12 +75,15 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		addrMap := map[string]any{}
 		if addr.Locality != "" {
 			addrMap["locality"] = addr.Locality
+			profile["locality"] = addr.Locality
 		}
 		if addr.Region != "" {
 			addrMap["region"] = addr.Region
+			profile["region"] = addr.Region
 		}
 		if addr.Country != "" {
 			addrMap["country"] = addr.Country
+			profile["country"] = addr.Country
 		}
 		if addr.StreetAddress != "" {
 			addrMap["street_address"] = addr.StreetAddress
@@ -90,15 +93,6 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		}
 		if len(addrMap) > 0 {
 			profile["address"] = addrMap
-		}
-		if addr.Locality != "" {
-			profile["locality"] = addr.Locality
-		}
-		if addr.Region != "" {
-			profile["region"] = addr.Region
-		}
-		if addr.Country != "" {
-			profile["country"] = addr.Country
 		}
 		break
 	}
@@ -164,12 +158,21 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 			addrMap := map[string]any{}
 			if workLocation.Address.Locality != "" {
 				addrMap["locality"] = workLocation.Address.Locality
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["locality"] = workLocation.Address.Locality
 			}
 			if workLocation.Address.Region != "" {
 				addrMap["region"] = workLocation.Address.Region
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["region"] = workLocation.Address.Region
 			}
 			if workLocation.Address.Country != "" {
 				addrMap["country"] = workLocation.Address.Country
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["country"] = workLocation.Address.Country
 			}
 			if workLocation.Address.StreetAddress != "" {
 				addrMap["street_address"] = workLocation.Address.StreetAddress
@@ -179,15 +182,6 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 			}
 			if len(addrMap) > 0 {
 				profile["work_location_address"] = addrMap
-			}
-			if workLocation.Address.Locality != "" {
-				profile["locality"] = workLocation.Address.Locality
-			}
-			if workLocation.Address.Region != "" {
-				profile["region"] = workLocation.Address.Region
-			}
-			if workLocation.Address.Country != "" {
-				profile["country"] = workLocation.Address.Country
 			}
 		}
 	}
