@@ -45,46 +45,20 @@ func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any
 }
 
 func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResponse, *v2.RateLimitDescription, error) {
-	url := c.workersURL()
-	if nextLink != "" {
-		url = nextLink
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("baton-rippling: failed to create request: %w", err)
-	}
-
-	// Only add expand params on the initial request; next_link URLs already include them.
-	if nextLink == "" {
-		if expand := c.buildExpandParam(); expand != "" {
-			q := req.URL.Query()
-			q.Set("expand", expand)
-			req.URL.RawQuery = q.Encode()
-		}
+	// Build the base URL with expand params so that doGet handles the rest.
+	// The expand param is only needed on the initial request; next_link URLs
+	// already include it.
+	baseURL := c.workersURL()
+	if expand := c.buildExpandParam(); expand != "" {
+		baseURL += "?expand=" + expand
 	}
 
-	var ratelimitData v2.RateLimitDescription
 	var workers WorkersResponse
-	res, err := c.Do(
-		req,
-		uhttp.WithJSONResponse(&workers),
-		uhttp.WithRatelimitData(&ratelimitData),
-	)
+	rl, err := c.doGet(ctx, baseURL, nextLink, &workers)
 	if err != nil {
-		if res != nil {
-			defer res.Body.Close()
-			logBody(ctx, res.Body)
-		}
-		return nil, &ratelimitData, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
+		return nil, rl, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
 	}
-
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		logBody(ctx, res.Body)
-		return nil, &ratelimitData, fmt.Errorf("baton-rippling: unexpected status code: %d", res.StatusCode)
-	}
-
-	return &workers, &ratelimitData, nil
+	return &workers, rl, nil
 }
 
 func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse, *v2.RateLimitDescription, error) {
