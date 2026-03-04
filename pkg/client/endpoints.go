@@ -29,6 +29,7 @@ func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any
 	)
 	if err != nil {
 		if res != nil {
+			defer res.Body.Close()
 			logBody(ctx, res.Body)
 		}
 		return &ratelimitData, fmt.Errorf("request to %s failed: %w", baseURL, err)
@@ -71,6 +72,7 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 	)
 	if err != nil {
 		if res != nil {
+			defer res.Body.Close()
 			logBody(ctx, res.Body)
 		}
 		return nil, &ratelimitData, fmt.Errorf("failed to list workers: %w", err)
