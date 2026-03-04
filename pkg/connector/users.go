@@ -223,7 +223,7 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 	}
 
 	return resource.NewUserResource(
-		user.Name.DisplayName,
+		user.DisplayName,
 		userResourceType,
 		user.ID,
 		userOpts,

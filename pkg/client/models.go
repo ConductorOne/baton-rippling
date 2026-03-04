@@ -34,7 +34,6 @@ type Name struct {
 	FamilyName          string `json:"family_name,omitempty"`
 	PreferredGivenName  string `json:"preferred_given_name,omitempty"`
 	PreferredFamilyName string `json:"preferred_family_name,omitempty"`
-	DisplayName         string `json:"display_name"`
 }
 
 type User struct {
@@ -43,6 +42,7 @@ type User struct {
 	UpdatedAt         string        `json:"updated_at"`
 	Active            bool          `json:"active"`
 	Username          string        `json:"username"`
+	DisplayName       string        `json:"display_name"`
 	Name              Name          `json:"name"`
 	Emails            []Email       `json:"emails"`
 	PhoneNumbers      []PhoneNumber `json:"phone_numbers"`
@@ -90,6 +90,7 @@ type WorkerUser struct {
 	UpdatedAt         string        `json:"updated_at"`
 	Active            bool          `json:"active,omitempty"`
 	Username          string        `json:"username,omitempty"`
+	DisplayName       string        `json:"display_name,omitempty"`
 	Name              Name          `json:"name,omitempty"`
 	Emails            []Email       `json:"emails,omitempty"`
 	PhoneNumbers      []PhoneNumber `json:"phone_numbers,omitempty"`

@@ -10,13 +10,13 @@ import (
 
 func TestUserResource_NoWorker(t *testing.T) {
 	user := client.User{
-		ID:        "user-1",
-		Username:  "alice",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-1",
+		Username:    "alice",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Alice Smith",
 		Name: client.Name{
-			DisplayName:         "Alice Smith",
 			GivenName:           "Alice",
 			FamilyName:          "Smith",
 			Formatted:           "Alice Smith",
@@ -37,16 +37,16 @@ func TestUserResource_NoWorker(t *testing.T) {
 
 func TestUserResource_WithFullWorker(t *testing.T) {
 	user := client.User{
-		ID:        "user-2",
-		Username:  "bob",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-06-15T12:00:00Z",
+		ID:          "user-2",
+		Username:    "bob",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-06-15T12:00:00Z",
+		DisplayName: "Bob Jones",
 		Name: client.Name{
-			DisplayName: "Bob Jones",
-			GivenName:   "Bob",
-			FamilyName:  "Jones",
-			MiddleName:  "Michael",
+			GivenName:  "Bob",
+			FamilyName: "Jones",
+			MiddleName: "Michael",
 		},
 		Emails: []client.Email{{Value: "bob@example.com"}},
 		Addresses: []client.Address{
@@ -107,7 +107,7 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-03-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Carol Lee"},
+		DisplayName: "Carol Lee",
 		Emails:    []client.Email{{Value: "carol@example.com"}},
 	}
 	worker := &client.Worker{
@@ -134,7 +134,7 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 		Active:    false,
 		Locale:    "en-US",
 		CreatedAt: "2024-02-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Dave Kim"},
+		DisplayName: "Dave Kim",
 		Emails:    []client.Email{{Value: "dave@example.com"}},
 	}
 	worker := &client.Worker{
@@ -164,7 +164,7 @@ func TestUserResource_NoEmails(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Eve Wu"},
+		DisplayName: "Eve Wu",
 		Emails:    nil,
 	}
 
@@ -180,8 +180,8 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
+		DisplayName: "Grace Hopper",
 		Name: client.Name{
-			DisplayName:         "Grace Hopper",
 			GivenName:           "Grace",
 			FamilyName:          "Hopper",
 			MiddleName:          "Brewster",
@@ -256,7 +256,7 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Hank Hill"},
+		DisplayName: "Hank Hill",
 		Emails:    []client.Email{{Value: "hank@example.com"}},
 		Addresses: []client.Address{
 			{
@@ -289,7 +289,7 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Irene Adler"},
+		DisplayName: "Irene Adler",
 		Emails:    []client.Email{{Value: "irene@example.com"}},
 		Addresses: []client.Address{
 			{
@@ -311,7 +311,7 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Kate Walsh"},
+		DisplayName: "Kate Walsh",
 		Emails:    []client.Email{{Value: "kate@example.com"}},
 	}
 	worker := &client.Worker{
@@ -366,7 +366,7 @@ func TestUserResource_NilWorkLocation(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Leo Park"},
+		DisplayName: "Leo Park",
 		Emails:    []client.Email{{Value: "leo@example.com"}},
 	}
 	worker := &client.Worker{
@@ -387,7 +387,7 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 		Active:    true,
 		Locale:    "en-US",
 		CreatedAt: "2024-01-01T00:00:00Z",
-		Name:      client.Name{DisplayName: "Maya Chen"},
+		DisplayName: "Maya Chen",
 		Emails:    []client.Email{{Value: "maya@example.com"}},
 	}
 	worker := &client.Worker{
@@ -422,7 +422,7 @@ func TestUserResource_InvalidCreatedAt(t *testing.T) {
 		Username:  "frank",
 		Active:    true,
 		CreatedAt: "not-a-date",
-		Name:      client.Name{DisplayName: "Frank"},
+		DisplayName: "Frank",
 	}
 
 	_, err := userResource(user, nil, nil)
