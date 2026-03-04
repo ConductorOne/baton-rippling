@@ -1,45 +1,45 @@
 {
-  "@type":  "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
-  "resourceTypeCapabilities":  [
+  "@type": "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
+  "resourceTypeCapabilities": [
     {
-      "resourceType":  {
-        "id":  "team",
-        "displayName":  "Team",
-        "traits":  [
+      "resourceType": {
+        "id": "team",
+        "displayName": "Team",
+        "traits": [
           "TRAIT_GROUP"
         ],
-        "annotations":  [
+        "annotations": [
           {
-            "@type":  "type.googleapis.com/c1.connector.v2.SkipGrants"
+            "@type": "type.googleapis.com/c1.connector.v2.SkipGrants"
           }
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC"
       ],
-      "permissions":  {}
+      "permissions": {}
     },
     {
-      "resourceType":  {
-        "id":  "user",
-        "displayName":  "User",
-        "traits":  [
+      "resourceType": {
+        "id": "user",
+        "displayName": "User",
+        "traits": [
           "TRAIT_USER"
         ],
-        "annotations":  [
+        "annotations": [
           {
-            "@type":  "type.googleapis.com/c1.connector.v2.SkipEntitlements"
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlements"
           }
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC"
       ],
-      "permissions":  {}
+      "permissions": {}
     }
   ],
-  "connectorCapabilities":  [
+  "connectorCapabilities": [
     "CAPABILITY_SYNC"
   ],
-  "credentialDetails":  {}
+  "credentialDetails": {}
 }
