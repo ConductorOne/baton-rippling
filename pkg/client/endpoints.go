@@ -29,13 +29,11 @@ func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any
 	)
 	if err != nil {
 		if res != nil {
-			defer res.Body.Close()
 			logBody(ctx, res.Body)
 		}
 		return &ratelimitData, fmt.Errorf("request to %s failed: %w", baseURL, err)
 	}
 
-	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		logBody(ctx, res.Body)
 		return &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
