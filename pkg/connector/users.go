@@ -215,6 +215,7 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		resource.WithUserProfile(profile),
 		resource.WithCreatedAt(createdAt),
 		resource.WithStatus(userStatus),
+		resource.WithUserLogin(user.Username),
 	}
 
 	email := getWorkEmail(user.Emails)
