@@ -48,7 +48,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 func New(ctx context.Context, apiToken string, baseURL string, expandOpts client.ExpandOptions, expandWorkLocations bool) (*Connector, error) {
 	c, err := client.New(ctx, apiToken, baseURL, expandOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
+		return nil, fmt.Errorf("baton-rippling: failed to create client: %w", err)
 	}
 	return &Connector{
 		client:              c,

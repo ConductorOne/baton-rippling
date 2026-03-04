@@ -29,7 +29,7 @@ func New(ctx context.Context, apiToken string, baseURL string, expandOpts Expand
 
 	client, err := uhttp.NewBearerAuth(apiToken).GetClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+		return nil, fmt.Errorf("baton-rippling: failed to create HTTP client: %w", err)
 	}
 
 	return &Client{
