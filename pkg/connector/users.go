@@ -17,30 +17,84 @@ import (
 	"go.uber.org/zap"
 )
 
-const workEmailType = "WORK"
+const workType = "WORK"
 const workersSessionPrefix = "workers"
+const workLocationsSessionPrefix = "work_locations"
 
-// Page token prefixes to distinguish the two phases of user List():
-// Phase 1 pages through workers, storing each page in the session store.
-// Phase 2 pages through users, looking up cached workers per-user.
+// Page token prefixes to distinguish the phases of user List():
+// Phase 1 (optional): pages through work locations, storing each in the session store.
+// Phase 2: pages through workers, storing each page in the session store.
+// Phase 3: pages through users, looking up cached workers and locations per-user.
 const (
-	workersPagePrefix = "w:"
-	usersPagePrefix   = "u:"
+	locationsPagePrefix = "l:"
+	workersPagePrefix   = "w:"
+	usersPagePrefix     = "u:"
 )
 
 type userBuilder struct {
-	client *client.Client
+	client              *client.Client
+	expandWorkLocations bool
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User, worker *client.Worker) (*v2.Resource, error) {
+func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation) (*v2.Resource, error) {
 	profile := map[string]any{
 		"username": user.Username,
 		"active":   user.Active,
 		"locale":   user.Locale,
+	}
+
+	// Name fields from User
+	if user.Name.GivenName != "" {
+		profile["given_name"] = user.Name.GivenName
+	}
+	if user.Name.FamilyName != "" {
+		profile["family_name"] = user.Name.FamilyName
+	}
+	if user.Name.MiddleName != "" {
+		profile["middle_name"] = user.Name.MiddleName
+	}
+	if user.Name.Formatted != "" {
+		profile["formatted_name"] = user.Name.Formatted
+	}
+	if user.Name.PreferredGivenName != "" {
+		profile["preferred_given_name"] = user.Name.PreferredGivenName
+	}
+	if user.Name.PreferredFamilyName != "" {
+		profile["preferred_family_name"] = user.Name.PreferredFamilyName
+	}
+
+	// Work address from User (first WORK-type address wins)
+	for _, addr := range user.Addresses {
+		if !strings.EqualFold(addr.Type, workType) {
+			continue
+		}
+		addrMap := map[string]any{}
+		if addr.Locality != "" {
+			addrMap["locality"] = addr.Locality
+			profile["locality"] = addr.Locality
+		}
+		if addr.Region != "" {
+			addrMap["region"] = addr.Region
+			profile["region"] = addr.Region
+		}
+		if addr.Country != "" {
+			addrMap["country"] = addr.Country
+			profile["country"] = addr.Country
+		}
+		if addr.StreetAddress != "" {
+			addrMap["street_address"] = addr.StreetAddress
+		}
+		if addr.PostalCode != "" {
+			addrMap["postal_code"] = addr.PostalCode
+		}
+		if len(addrMap) > 0 {
+			profile["address"] = addrMap
+		}
+		break
 	}
 
 	// Add worker-related attributes if available
@@ -61,28 +115,24 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		if worker.WorkEmail != "" {
 			profile["work_email"] = worker.WorkEmail
 		}
-		if worker.Country != "" {
-			profile["country"] = worker.Country
-		}
 
 		// Employment type information
 		if worker.EmploymentType != nil {
-			employmentType := map[string]any{}
-			if worker.EmploymentType.Label != "" {
-				employmentType["label"] = worker.EmploymentType.Label
+			if worker.EmploymentType.Type != "" {
+				profile["employment_type"] = worker.EmploymentType.Type
 			}
 			if worker.EmploymentType.Name != "" {
-				employmentType["name"] = worker.EmploymentType.Name
+				profile["employment_name"] = worker.EmploymentType.Name
 			}
-			if worker.EmploymentType.Type != "" {
-				employmentType["type"] = worker.EmploymentType.Type
-			}
-			if len(employmentType) > 0 {
-				profile["employment_type"] = employmentType
+			if worker.EmploymentType.Label != "" {
+				profile["employment_label"] = worker.EmploymentType.Label
 			}
 		}
 
 		// Department information
+		if worker.DepartmentID != "" {
+			profile["department_id"] = worker.DepartmentID
+		}
 		if worker.Department != nil && worker.Department.Name != "" {
 			profile["department"] = worker.Department.Name
 		}
@@ -107,6 +157,43 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		}
 	}
 
+	// Work location details (from separate API call)
+	if workLocation != nil {
+		if workLocation.Name != "" {
+			profile["work_location_name"] = workLocation.Name
+		}
+		if workLocation.Address != nil {
+			addrMap := map[string]any{}
+			if workLocation.Address.Locality != "" {
+				addrMap["locality"] = workLocation.Address.Locality
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["locality"] = workLocation.Address.Locality
+			}
+			if workLocation.Address.Region != "" {
+				addrMap["region"] = workLocation.Address.Region
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["region"] = workLocation.Address.Region
+			}
+			if workLocation.Address.Country != "" {
+				addrMap["country"] = workLocation.Address.Country
+				// Work location address takes precedence over user WORK address
+				// for top-level locality/region/country fields.
+				profile["country"] = workLocation.Address.Country
+			}
+			if workLocation.Address.StreetAddress != "" {
+				addrMap["street_address"] = workLocation.Address.StreetAddress
+			}
+			if workLocation.Address.PostalCode != "" {
+				addrMap["postal_code"] = workLocation.Address.PostalCode
+			}
+			if len(addrMap) > 0 {
+				profile["work_location_address"] = addrMap
+			}
+		}
+	}
+
 	// convert to time.Time
 	createdAt, err := time.Parse(time.RFC3339, user.CreatedAt)
 	if err != nil {
@@ -128,19 +215,55 @@ func userResource(user client.User, worker *client.Worker) (*v2.Resource, error)
 		resource.WithUserProfile(profile),
 		resource.WithCreatedAt(createdAt),
 		resource.WithStatus(userStatus),
+		resource.WithUserLogin(user.Username),
 	}
 
 	email := getWorkEmail(user.Emails)
 	if email != nil {
-		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workEmailType)))
+		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workType)))
 	}
 
 	return resource.NewUserResource(
-		user.Name.DisplayName,
+		user.DisplayName,
 		userResourceType,
 		user.ID,
 		userOpts,
 	)
+}
+
+// listWorkLocationPage fetches one page of work locations from the API and
+// stores them in the session store. Returns no resources — this phase only populates the cache.
+func (o *userBuilder) listWorkLocationPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+	var annos annotations.Annotations
+	resp, ratelimitData, err := o.client.ListWorkLocations(ctx, pageToken)
+	annos = *annos.WithRateLimiting(ratelimitData)
+	if err != nil {
+		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list work locations: %w", err)
+	}
+
+	toStore := make(map[string]client.WorkLocation, len(resp.Results))
+	for _, loc := range resp.Results {
+		if loc.ID != "" {
+			toStore[loc.ID] = loc
+		}
+	}
+	if len(toStore) > 0 {
+		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workLocationsSessionPrefix)); err != nil {
+			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store work locations in session store: %w", err)
+		}
+	}
+
+	// If more pages remain, stay in the locations phase.
+	// Otherwise transition to the workers phase.
+	nextToken := workersPagePrefix
+	if resp.NextLink != "" {
+		nextToken = locationsPagePrefix + resp.NextLink
+	}
+
+	return nil, &resource.SyncOpResults{
+		NextPageToken: nextToken,
+		Annotations:   annos,
+	}, nil
 }
 
 // listWorkerPage fetches one page of workers from the API and stores them in
@@ -197,6 +320,27 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get workers from session store: %w", err)
 	}
 
+	// Batch-fetch work locations for all workers on this page.
+	var workLocations map[string]client.WorkLocation
+	if o.expandWorkLocations {
+		locationIDs := make([]string, 0)
+		seen := make(map[string]bool)
+		for _, user := range usersResponse.Results {
+			if worker, found := workers[user.ID]; found {
+				if worker.Location != nil && worker.Location.WorkLocationID != "" && !seen[worker.Location.WorkLocationID] {
+					locationIDs = append(locationIDs, worker.Location.WorkLocationID)
+					seen[worker.Location.WorkLocationID] = true
+				}
+			}
+		}
+		if len(locationIDs) > 0 {
+			workLocations, err = session.GetManyJSON[client.WorkLocation](ctx, ss, locationIDs, sessions.WithPrefix(workLocationsSessionPrefix))
+			if err != nil {
+				return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get work locations from session store: %w", err)
+			}
+		}
+	}
+
 	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
 	for _, user := range usersResponse.Results {
 		var workerPtr *client.Worker
@@ -204,7 +348,14 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			workerPtr = &worker
 		}
 
-		r, err := userResource(user, workerPtr)
+		var workLocationPtr *client.WorkLocation
+		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
+			if wl, ok := workLocations[workerPtr.Location.WorkLocationID]; ok {
+				workLocationPtr = &wl
+			}
+		}
+
+		r, err := userResource(user, workerPtr, workLocationPtr)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
@@ -226,12 +377,16 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 	token := opts.PageToken.Token
 
 	switch {
+	case o.expandWorkLocations && (token == "" || strings.HasPrefix(token, locationsPagePrefix)):
+		// Phase 1 (optional): page through work locations, storing each in the session store.
+		return o.listWorkLocationPage(ctx, strings.TrimPrefix(token, locationsPagePrefix), opts.Session)
+
 	case token == "" || strings.HasPrefix(token, workersPagePrefix):
-		// Phase 1: page through workers, storing each page in the session store.
+		// Phase 2: page through workers, storing each page in the session store.
 		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
 
 	default:
-		// Phase 2: page through users, looking up cached workers per-user.
+		// Phase 3: page through users, looking up cached workers and locations per-user.
 		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
 	}
 }
@@ -239,7 +394,7 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 func getWorkEmail(emails []client.Email) *client.Email {
 	var workEmail *client.Email
 	for _, e := range emails {
-		if strings.EqualFold(e.Type, workEmailType) {
+		if strings.EqualFold(e.Type, workType) {
 			return &e
 		}
 
@@ -291,8 +446,9 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 	return rv, nil, nil
 }
 
-func newUserBuilder(client *client.Client) *userBuilder {
+func newUserBuilder(client *client.Client, expandWorkLocations bool) *userBuilder {
 	return &userBuilder{
-		client: client,
+		client:              client,
+		expandWorkLocations: expandWorkLocations,
 	}
 }

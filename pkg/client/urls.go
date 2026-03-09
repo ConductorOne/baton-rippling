@@ -1,8 +1,10 @@
 package client
 
 const (
-	BaseURL    = "https://rest.ripplingapis.com"
-	UsersURL   = BaseURL + "/users"
-	TeamsURL   = BaseURL + "/teams"
-	WorkersURL = BaseURL + "/workers"
+	DefaultBaseURL = "https://rest.ripplingapis.com"
+
+	usersPath         = "/users"
+	teamsPath         = "/teams"
+	workersPath       = "/workers"
+	workLocationsPath = "/work-locations"
 )

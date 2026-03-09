@@ -28,7 +28,12 @@ type Photo struct {
 }
 
 type Name struct {
-	DisplayName string `json:"display_name"`
+	Formatted           string `json:"formatted,omitempty"`
+	GivenName           string `json:"given_name,omitempty"`
+	MiddleName          string `json:"middle_name,omitempty"`
+	FamilyName          string `json:"family_name,omitempty"`
+	PreferredGivenName  string `json:"preferred_given_name,omitempty"`
+	PreferredFamilyName string `json:"preferred_family_name,omitempty"`
 }
 
 type User struct {
@@ -37,6 +42,7 @@ type User struct {
 	UpdatedAt         string        `json:"updated_at"`
 	Active            bool          `json:"active"`
 	Username          string        `json:"username"`
+	DisplayName       string        `json:"display_name"`
 	Name              Name          `json:"name"`
 	Emails            []Email       `json:"emails"`
 	PhoneNumbers      []PhoneNumber `json:"phone_numbers"`
@@ -78,23 +84,14 @@ type TeamsResponse struct {
 	NextLink string `json:"next_link,omitempty"`
 }
 
-type WorkerName struct {
-	Formatted           string `json:"formatted,omitempty"`
-	GivenName           string `json:"given_name,omitempty"`
-	MiddleName          string `json:"middle_name,omitempty"`
-	FamilyName          string `json:"family_name,omitempty"`
-	PreferredGivenName  string `json:"preferred_given_name,omitempty"`
-	PreferredFamilyName string `json:"preferred_family_name,omitempty"`
-	DisplayName         string `json:"display_name,omitempty"`
-}
-
 type WorkerUser struct {
 	ID                string        `json:"id"`
 	CreatedAt         string        `json:"created_at"`
 	UpdatedAt         string        `json:"updated_at"`
 	Active            bool          `json:"active,omitempty"`
 	Username          string        `json:"username,omitempty"`
-	Name              WorkerName    `json:"name,omitempty"`
+	DisplayName       string        `json:"display_name,omitempty"`
+	Name              Name          `json:"name,omitempty"`
 	Emails            []Email       `json:"emails,omitempty"`
 	PhoneNumbers      []PhoneNumber `json:"phone_numbers,omitempty"`
 	Addresses         []Address     `json:"addresses,omitempty"`
@@ -305,4 +302,18 @@ type WorkersResponse struct {
 	Meta     Meta     `json:"__meta"`
 	Results  []Worker `json:"results"`
 	NextLink string   `json:"next_link,omitempty"`
+}
+
+type WorkLocation struct {
+	ID        string   `json:"id"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+	Name      string   `json:"name"`
+	Address   *Address `json:"address,omitempty"`
+}
+
+type WorkLocationsResponse struct {
+	Meta     Meta           `json:"__meta"`
+	Results  []WorkLocation `json:"results"`
+	NextLink string         `json:"next_link,omitempty"`
 }

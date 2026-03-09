@@ -53,11 +53,11 @@ func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.Run
 		return nil, err
 	}
 
-	cb, err := connector.New(ctx, config.ApiToken, client.ExpandOptions{
+	cb, err := connector.New(ctx, config.ApiToken, config.BaseUrl, client.ExpandOptions{
 		Department:     config.ExpandDepartment,
 		EmploymentType: config.ExpandEmploymentType,
 		Level:          config.ExpandLevel,
-	})
+	}, config.ExpandWorkLocations)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

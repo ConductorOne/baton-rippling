@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/conductorone/baton-rippling/pkg/client"
 	"github.com/conductorone/baton-sdk/pkg/field"
 )
 
@@ -11,6 +12,12 @@ var (
 		field.WithDescription("The API token for the Rippling connector. This is used to authenticate API requests."),
 		field.WithRequired(true),
 		field.WithIsSecret(true),
+	)
+	BaseURL = field.StringField("base-url",
+		field.WithDisplayName("Base URL"),
+		field.WithDescription("The base URL for the Rippling API."),
+		field.WithDefaultValue(client.DefaultBaseURL),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
 	)
 	ExpandDepartment = field.BoolField("expand-department",
 		field.WithDisplayName("Expand department"),
@@ -24,11 +31,17 @@ var (
 		field.WithDisplayName("Expand level"),
 		field.WithDescription("Include level data in worker sync. Requires the levels.read scope."),
 	)
+	ExpandWorkLocations = field.BoolField("expand-work-locations",
+		field.WithDisplayName("Expand work locations"),
+		field.WithDescription("Include work location name and address in user profiles. Requires the work-locations.read scope."),
+	)
 	ConfigurationFields = []field.SchemaField{
 		ApiToken,
+		BaseURL,
 		ExpandDepartment,
 		ExpandEmploymentType,
 		ExpandLevel,
+		ExpandWorkLocations,
 	}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.
