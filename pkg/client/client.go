@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
@@ -39,10 +40,10 @@ func New(ctx context.Context, apiToken string, baseURL string, expandOpts Expand
 	}, nil
 }
 
-func (c *Client) usersURL() string         { return c.baseURL + usersPath }
-func (c *Client) teamsURL() string         { return c.baseURL + teamsPath }
-func (c *Client) workersURL() string       { return c.baseURL + workersPath }
-func (c *Client) workLocationsURL() string { return c.baseURL + workLocationsPath }
+func (c *Client) usersURL() string         { u, _ := url.JoinPath(c.baseURL, usersPath); return u }
+func (c *Client) teamsURL() string         { u, _ := url.JoinPath(c.baseURL, teamsPath); return u }
+func (c *Client) workersURL() string       { u, _ := url.JoinPath(c.baseURL, workersPath); return u }
+func (c *Client) workLocationsURL() string { u, _ := url.JoinPath(c.baseURL, workLocationsPath); return u }
 
 func (c *Client) buildExpandParam() string {
 	// Manager is always expanded since it only requires the workers.read scope

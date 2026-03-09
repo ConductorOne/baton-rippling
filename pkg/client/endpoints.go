@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
@@ -36,11 +37,6 @@ func (c *Client) doGet(ctx context.Context, baseURL, nextLink string, target any
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		logBody(ctx, res.Body)
-		return &ratelimitData, fmt.Errorf("unexpected status code: %d", res.StatusCode)
-	}
-
 	return &ratelimitData, nil
 }
 
@@ -48,10 +44,13 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 	// Build the base URL with expand params so that doGet handles the rest.
 	// The expand param is only needed on the initial request; next_link URLs
 	// already include it.
-	baseURL := c.workersURL()
+	u, _ := url.Parse(c.workersURL())
 	if expand := c.buildExpandParam(); expand != "" {
-		baseURL += "?expand=" + expand
+		q := u.Query()
+		q.Set("expand", expand)
+		u.RawQuery = q.Encode()
 	}
+	baseURL := u.String()
 
 	var workers WorkersResponse
 	rl, err := c.doGet(ctx, baseURL, nextLink, &workers)
