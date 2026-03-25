@@ -17,6 +17,7 @@ var (
 		field.WithDisplayName("Base URL"),
 		field.WithDescription("The base URL for the Rippling API."),
 		field.WithDefaultValue(client.DefaultBaseURL),
+		field.WithHidden(true),
 		field.WithExportTarget(field.ExportTargetCLIOnly),
 	)
 	ExpandDepartment = field.BoolField("expand-department",
