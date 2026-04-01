@@ -34,6 +34,7 @@ const (
 type userBuilder struct {
 	client              *client.Client
 	expandWorkLocations bool
+	customFieldNames    []string
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
@@ -446,9 +447,10 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 	return rv, nil, nil
 }
 
-func newUserBuilder(client *client.Client, expandWorkLocations bool) *userBuilder {
+func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {
 	return &userBuilder{
 		client:              client,
 		expandWorkLocations: expandWorkLocations,
+		customFieldNames:    customFieldNames,
 	}
 }

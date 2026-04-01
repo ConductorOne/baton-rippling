@@ -36,6 +36,10 @@ var (
 		field.WithDisplayName("Expand work locations"),
 		field.WithDescription("Include work location name and address in user profiles. Requires the work-locations.read scope."),
 	)
+	CustomFields = field.StringSliceField("custom-fields",
+		field.WithDisplayName("Custom fields"),
+		field.WithDescription("List of custom field names to sync from the Rippling Workers endpoint. Only fields with names matching this list (case-insensitive) will be included in user profiles."),
+	)
 	ConfigurationFields = []field.SchemaField{
 		ApiToken,
 		BaseURL,
@@ -43,6 +47,7 @@ var (
 		ExpandEmploymentType,
 		ExpandLevel,
 		ExpandWorkLocations,
+		CustomFields,
 	}
 
 	// FieldRelationships defines relationships between the ConfigurationFields that can be automatically validated.

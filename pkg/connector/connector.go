@@ -12,14 +12,15 @@ import (
 )
 
 type Connector struct {
-	client               *client.Client
-	expandWorkLocations  bool
+	client              *client.Client
+	expandWorkLocations bool
+	customFieldNames    []string
 }
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
 	return []connectorbuilder.ResourceSyncerV2{
-		newUserBuilder(d.client, d.expandWorkLocations),
+		newUserBuilder(d.client, d.expandWorkLocations, d.customFieldNames),
 		newTeamBuilder(d.client),
 	}
 }
@@ -45,7 +46,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, apiToken string, baseURL string, expandOpts client.ExpandOptions, expandWorkLocations bool) (*Connector, error) {
+func New(ctx context.Context, apiToken string, baseURL string, expandOpts client.ExpandOptions, expandWorkLocations bool, customFieldNames []string) (*Connector, error) {
 	c, err := client.New(ctx, apiToken, baseURL, expandOpts)
 	if err != nil {
 		return nil, fmt.Errorf("baton-rippling: failed to create client: %w", err)
@@ -53,5 +54,6 @@ func New(ctx context.Context, apiToken string, baseURL string, expandOpts client
 	return &Connector{
 		client:              c,
 		expandWorkLocations: expandWorkLocations,
+		customFieldNames:    customFieldNames,
 	}, nil
 }
