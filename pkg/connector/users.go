@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -172,7 +173,17 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 					continue
 				}
 				key := strings.ToLower(strings.ReplaceAll(name, " ", "_"))
-				strVal := fmt.Sprintf("%v", cf.Value)
+				if _, exists := profile[key]; exists {
+					continue // don't overwrite built-in profile fields
+				}
+				var strVal string
+				switch v := cf.Value.(type) {
+				case string:
+					strVal = v
+				default:
+					b, _ := json.Marshal(v)
+					strVal = string(b)
+				}
 				if strVal == "" {
 					continue
 				}

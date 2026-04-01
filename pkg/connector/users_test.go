@@ -532,3 +532,38 @@ func TestUserResource_NoCustomFieldsConfig(t *testing.T) {
 
 	assert.Nil(t, fields["scrum_teams"], "custom field should not appear when config is empty")
 }
+
+func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
+	user := client.User{
+		ID:          "user-cf-4",
+		Username:    "dave",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Dave Kim",
+		Emails:      []client.Email{{Value: "dave@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-cf-4",
+		UserID: "user-cf-4",
+		Status: "ACTIVE",
+		Title:  "Senior Engineer",
+		CustomFields: []client.CustomField{
+			{Name: "Title", Type: "text", Value: "Should Not Overwrite"},
+		},
+	}
+
+	r, err := userResource(user, worker, nil, []string{"Title"})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	// Built-in "title" from worker.Title should be preserved, not overwritten
+	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
+}
