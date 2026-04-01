@@ -164,14 +164,19 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 				allowed[strings.ToLower(name)] = true
 			}
 			for _, cf := range worker.CustomFields {
-				if cf.Name == "" || cf.Value == "" {
+				name := strings.TrimSpace(cf.Name)
+				if name == "" || cf.Value == nil {
 					continue
 				}
-				if !allowed[strings.ToLower(cf.Name)] {
+				if !allowed[strings.ToLower(name)] {
 					continue
 				}
-				key := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(cf.Name), " ", "_"))
-				profile[key] = cf.Value
+				key := strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+				strVal := fmt.Sprintf("%v", cf.Value)
+				if strVal == "" {
+					continue
+				}
+				profile[key] = strVal
 			}
 		}
 	}
