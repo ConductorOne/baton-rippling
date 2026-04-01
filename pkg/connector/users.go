@@ -41,7 +41,7 @@ func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation) (*v2.Resource, error) {
+func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
 	profile := map[string]any{
 		"username": user.Username,
 		"active":   user.Active,
@@ -155,6 +155,24 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		// Location information
 		if worker.Location != nil && worker.Location.WorkLocationID != "" {
 			profile["work_location_id"] = worker.Location.WorkLocationID
+		}
+
+		// Custom fields — only include fields whose names match the configured list.
+		if len(customFieldNames) > 0 {
+			allowed := make(map[string]bool, len(customFieldNames))
+			for _, name := range customFieldNames {
+				allowed[strings.ToLower(name)] = true
+			}
+			for _, cf := range worker.CustomFields {
+				if cf.Name == "" || cf.Value == "" {
+					continue
+				}
+				if !allowed[strings.ToLower(cf.Name)] {
+					continue
+				}
+				key := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(cf.Name), " ", "_"))
+				profile[key] = cf.Value
+			}
 		}
 	}
 
@@ -356,7 +374,7 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			}
 		}
 
-		r, err := userResource(user, workerPtr, workLocationPtr)
+		r, err := userResource(user, workerPtr, workLocationPtr, o.customFieldNames)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
