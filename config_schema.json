@@ -127,6 +127,12 @@
       "displayName": "Expand work locations",
       "description": "Include work location name and address in user profiles. Requires the work-locations.read scope.",
       "boolField": {}
+    },
+    {
+      "name": "custom-fields",
+      "displayName": "Custom fields",
+      "description": "List of custom field names to sync from the Rippling Workers endpoint. Only fields with names matching this list (case-insensitive) will be included in user profiles.",
+      "stringSliceField": {}
     }
   ],
   "displayName": "Rippling",

@@ -26,7 +26,7 @@ func TestUserResource_NoWorker(t *testing.T) {
 		Emails: []client.Email{{Value: "alice@example.com"}},
 	}
 
-	r, err := userResource(user, nil, nil)
+	r, err := userResource(user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Alice Smith", r.DisplayName)
 	assert.Equal(t, "user-1", r.Id.Resource)
@@ -94,7 +94,7 @@ func TestUserResource_WithFullWorker(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil)
+	r, err := userResource(user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Bob Jones", r.DisplayName)
 	assert.Equal(t, "user-2", r.Id.Resource)
@@ -122,7 +122,7 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 		Location:       nil,
 	}
 
-	r, err := userResource(user, worker, nil)
+	r, err := userResource(user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Carol Lee", r.DisplayName)
 }
@@ -152,7 +152,7 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 		Location:   &client.Location{WorkLocationID: ""},
 	}
 
-	r, err := userResource(user, worker, nil)
+	r, err := userResource(user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Dave Kim", r.DisplayName)
 }
@@ -168,7 +168,7 @@ func TestUserResource_NoEmails(t *testing.T) {
 		Emails:    nil,
 	}
 
-	r, err := userResource(user, nil, nil)
+	r, err := userResource(user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Eve Wu", r.DisplayName)
 }
@@ -222,7 +222,7 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 		Department:   &client.Department{Name: "R&D"},
 	}
 
-	r, err := userResource(user, worker, nil)
+	r, err := userResource(user, worker, nil, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -268,7 +268,7 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil, nil)
+	r, err := userResource(user, nil, nil, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -299,7 +299,7 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil, nil)
+	r, err := userResource(user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Irene Adler", r.DisplayName)
 }
@@ -334,7 +334,7 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, workLocation)
+	r, err := userResource(user, worker, workLocation, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -375,7 +375,7 @@ func TestUserResource_NilWorkLocation(t *testing.T) {
 		Status: "ACTIVE",
 	}
 
-	r, err := userResource(user, worker, nil)
+	r, err := userResource(user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Leo Park", r.DisplayName)
 }
@@ -400,7 +400,7 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 		Name: "Remote",
 	}
 
-	r, err := userResource(user, worker, workLocation)
+	r, err := userResource(user, worker, workLocation, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -425,7 +425,145 @@ func TestUserResource_InvalidCreatedAt(t *testing.T) {
 		DisplayName: "Frank",
 	}
 
-	_, err := userResource(user, nil, nil)
+	_, err := userResource(user, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse created_at")
+}
+
+func TestUserResource_CustomFieldsAddedToProfile(t *testing.T) {
+	user := client.User{
+		ID:          "user-cf-1",
+		Username:    "alice",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Alice Smith",
+		Emails:      []client.Email{{Value: "alice@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-cf-1",
+		UserID: "user-cf-1",
+		Status: "ACTIVE",
+		CustomFields: []client.CustomField{
+			{Name: "Scrum Teams", Type: "text", Value: "Digital Onboarding"},
+			{Name: "Scrum Team Code", Type: "text", Value: "DOB"},
+			{Name: "Other Field", Type: "text", Value: "should be excluded"},
+		},
+	}
+
+	r, err := userResource(user, worker, nil, []string{"Scrum Teams", "Scrum Team Code"})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "Digital Onboarding", fields["scrum_teams"].GetStringValue())
+	assert.Equal(t, "DOB", fields["scrum_team_code"].GetStringValue())
+	assert.Nil(t, fields["other_field"], "non-configured custom field should not appear")
+}
+
+func TestUserResource_CustomFieldsCaseInsensitive(t *testing.T) {
+	user := client.User{
+		ID:          "user-cf-2",
+		Username:    "bob",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Bob Jones",
+		Emails:      []client.Email{{Value: "bob@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-cf-2",
+		UserID: "user-cf-2",
+		Status: "ACTIVE",
+		CustomFields: []client.CustomField{
+			{Name: "SCRUM TEAMS", Type: "text", Value: "Platform"},
+		},
+	}
+
+	r, err := userResource(user, worker, nil, []string{"scrum teams"})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "Platform", fields["scrum_teams"].GetStringValue())
+}
+
+func TestUserResource_NoCustomFieldsConfig(t *testing.T) {
+	user := client.User{
+		ID:          "user-cf-3",
+		Username:    "carol",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Carol Lee",
+		Emails:      []client.Email{{Value: "carol@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-cf-3",
+		UserID: "user-cf-3",
+		Status: "ACTIVE",
+		CustomFields: []client.CustomField{
+			{Name: "Scrum Teams", Type: "text", Value: "Digital Onboarding"},
+		},
+	}
+
+	r, err := userResource(user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Nil(t, fields["scrum_teams"], "custom field should not appear when config is empty")
+}
+
+func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
+	user := client.User{
+		ID:          "user-cf-4",
+		Username:    "dave",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Dave Kim",
+		Emails:      []client.Email{{Value: "dave@example.com"}},
+	}
+	worker := &client.Worker{
+		ID:     "worker-cf-4",
+		UserID: "user-cf-4",
+		Status: "ACTIVE",
+		Title:  "Senior Engineer",
+		CustomFields: []client.CustomField{
+			{Name: "Title", Type: "text", Value: "Should Not Overwrite"},
+		},
+	}
+
+	r, err := userResource(user, worker, nil, []string{"Title"})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	// Built-in "title" from worker.Title should be preserved, not overwritten
+	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
 }

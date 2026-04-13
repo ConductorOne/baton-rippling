@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -34,13 +35,14 @@ const (
 type userBuilder struct {
 	client              *client.Client
 	expandWorkLocations bool
+	customFieldNames    []string
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation) (*v2.Resource, error) {
+func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
 	profile := map[string]any{
 		"username": user.Username,
 		"active":   user.Active,
@@ -154,6 +156,39 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		// Location information
 		if worker.Location != nil && worker.Location.WorkLocationID != "" {
 			profile["work_location_id"] = worker.Location.WorkLocationID
+		}
+
+		// Custom fields — only include fields whose names match the configured list.
+		if len(customFieldNames) > 0 {
+			allowed := make(map[string]bool, len(customFieldNames))
+			for _, name := range customFieldNames {
+				allowed[strings.ToLower(name)] = true
+			}
+			for _, cf := range worker.CustomFields {
+				name := strings.TrimSpace(cf.Name)
+				if name == "" || cf.Value == nil {
+					continue
+				}
+				if !allowed[strings.ToLower(name)] {
+					continue
+				}
+				key := strings.ToLower(strings.ReplaceAll(name, " ", "_"))
+				if _, exists := profile[key]; exists {
+					continue // don't overwrite built-in profile fields
+				}
+				var strVal string
+				switch v := cf.Value.(type) {
+				case string:
+					strVal = v
+				default:
+					b, _ := json.Marshal(v)
+					strVal = string(b)
+				}
+				if strVal == "" {
+					continue
+				}
+				profile[key] = strVal
+			}
 		}
 	}
 
@@ -355,7 +390,7 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			}
 		}
 
-		r, err := userResource(user, workerPtr, workLocationPtr)
+		r, err := userResource(user, workerPtr, workLocationPtr, o.customFieldNames)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
@@ -446,9 +481,10 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 	return rv, nil, nil
 }
 
-func newUserBuilder(client *client.Client, expandWorkLocations bool) *userBuilder {
+func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {
 	return &userBuilder{
 		client:              client,
 		expandWorkLocations: expandWorkLocations,
+		customFieldNames:    customFieldNames,
 	}
 }

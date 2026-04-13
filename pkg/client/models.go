@@ -255,6 +255,13 @@ type BusinessPartner struct {
 	ClientGroupMemberCount int                   `json:"client_group_member_count,omitempty"`
 }
 
+type CustomField struct {
+	ID    *string `json:"id"`
+	Name  string  `json:"name"`
+	Type  string  `json:"type"`
+	Value any     `json:"value"`
+}
+
 type Worker struct {
 	ID                 string              `json:"id"`
 	CreatedAt          string              `json:"created_at"`
@@ -292,7 +299,7 @@ type Worker struct {
 	LevelID            string              `json:"level_id,omitempty"`
 	Level              *Level              `json:"level,omitempty"`
 	TerminationDetails *TerminationDetails `json:"termination_details,omitempty"`
-	CustomFields       []interface{}       `json:"custom_fields,omitempty"`
+	CustomFields       []CustomField       `json:"custom_fields,omitempty"`
 	CountryFields      *CountryFields      `json:"country_fields,omitempty"`
 	BusinessPartnersID []string            `json:"business_partners_id,omitempty"`
 	BusinessPartners   []BusinessPartner   `json:"business_partners,omitempty"`

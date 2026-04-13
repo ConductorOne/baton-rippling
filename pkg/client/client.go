@@ -14,6 +14,7 @@ type ExpandOptions struct {
 	Department     bool
 	EmploymentType bool
 	Level          bool
+	CustomFields   bool
 }
 
 type Client struct {
@@ -57,6 +58,9 @@ func (c *Client) buildExpandParam() string {
 	}
 	if c.expandOptions.Level {
 		fields = append(fields, "level")
+	}
+	if c.expandOptions.CustomFields {
+		fields = append(fields, "custom_fields")
 	}
 	return strings.Join(fields, ",")
 }
