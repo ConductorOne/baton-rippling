@@ -246,11 +246,19 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		}
 	}
 
+	// Rippling's user.Username is not guaranteed to be the work email — it can
+	// be a personal/pre-boarding address. Emit the work email as a login alias
+	// so SSO lookups and cross-connector AppUser matching resolve to this user.
+	var aliases []string
+	if workEmail := resolveWorkEmail(user, worker); workEmail != "" && !strings.EqualFold(workEmail, user.Username) {
+		aliases = append(aliases, workEmail)
+	}
+
 	userOpts := []resource.UserTraitOption{
 		resource.WithUserProfile(profile),
 		resource.WithCreatedAt(createdAt),
 		resource.WithStatus(userStatus),
-		resource.WithUserLogin(user.Username),
+		resource.WithUserLogin(user.Username, aliases...),
 	}
 
 	email := getWorkEmail(user.Emails)
@@ -424,6 +432,18 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 		// Phase 3: page through users, looking up cached workers and locations per-user.
 		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
 	}
+}
+
+// resolveWorkEmail returns the user's work email for use as a login alias:
+// worker.WorkEmail takes precedence, then a WORK-typed entry in user.Emails.
+func resolveWorkEmail(user client.User, worker *client.Worker) string {
+	if worker != nil && worker.WorkEmail != "" {
+		return worker.WorkEmail
+	}
+	if e := getWorkEmail(user.Emails); e != nil && e.Value != "" && strings.EqualFold(e.Type, workType) {
+		return e.Value
+	}
+	return ""
 }
 
 func getWorkEmail(emails []client.Email) *client.Email {
