@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"context"
 	"testing"
 
 	"github.com/conductorone/baton-rippling/pkg/client"
@@ -26,7 +27,7 @@ func TestUserResource_NoWorker(t *testing.T) {
 		Emails: []client.Email{{Value: "alice@example.com"}},
 	}
 
-	r, err := userResource(user, nil, nil, nil)
+	r, err := userResource(context.Background(), user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Alice Smith", r.DisplayName)
 	assert.Equal(t, "user-1", r.Id.Resource)
@@ -94,7 +95,7 @@ func TestUserResource_WithFullWorker(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Bob Jones", r.DisplayName)
 	assert.Equal(t, "user-2", r.Id.Resource)
@@ -122,7 +123,7 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 		Location:       nil,
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Carol Lee", r.DisplayName)
 }
@@ -152,7 +153,7 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 		Location:   &client.Location{WorkLocationID: ""},
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Dave Kim", r.DisplayName)
 }
@@ -168,7 +169,7 @@ func TestUserResource_NoEmails(t *testing.T) {
 		Emails:    nil,
 	}
 
-	r, err := userResource(user, nil, nil, nil)
+	r, err := userResource(context.Background(), user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Eve Wu", r.DisplayName)
 }
@@ -222,7 +223,7 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 		Department:   &client.Department{Name: "R&D"},
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -268,7 +269,7 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil, nil, nil)
+	r, err := userResource(context.Background(), user, nil, nil, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -299,7 +300,7 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, nil, nil, nil)
+	r, err := userResource(context.Background(), user, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Irene Adler", r.DisplayName)
 }
@@ -334,7 +335,7 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, workLocation, nil)
+	r, err := userResource(context.Background(), user, worker, workLocation, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -375,7 +376,7 @@ func TestUserResource_NilWorkLocation(t *testing.T) {
 		Status: "ACTIVE",
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "Leo Park", r.DisplayName)
 }
@@ -400,7 +401,7 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 		Name: "Remote",
 	}
 
-	r, err := userResource(user, worker, workLocation, nil)
+	r, err := userResource(context.Background(), user, worker, workLocation, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -425,7 +426,7 @@ func TestUserResource_InvalidCreatedAt(t *testing.T) {
 		DisplayName: "Frank",
 	}
 
-	_, err := userResource(user, nil, nil, nil)
+	_, err := userResource(context.Background(), user, nil, nil, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse created_at")
 }
@@ -451,7 +452,7 @@ func TestUserResource_CustomFieldsAddedToProfile(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil, []string{"Scrum Teams", "Scrum Team Code"})
+	r, err := userResource(context.Background(), user, worker, nil, []string{"Scrum Teams", "Scrum Team Code"})
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -486,7 +487,7 @@ func TestUserResource_CustomFieldsCaseInsensitive(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil, []string{"scrum teams"})
+	r, err := userResource(context.Background(), user, worker, nil, []string{"scrum teams"})
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -519,7 +520,7 @@ func TestUserResource_NoCustomFieldsConfig(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil, nil)
+	r, err := userResource(context.Background(), user, worker, nil, nil)
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -553,7 +554,7 @@ func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
 		},
 	}
 
-	r, err := userResource(user, worker, nil, []string{"Title"})
+	r, err := userResource(context.Background(), user, worker, nil, []string{"Title"})
 	if !assert.NoError(t, err) {
 		return
 	}
@@ -566,4 +567,160 @@ func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
 
 	// Built-in "title" from worker.Title should be preserved, not overwritten
 	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
+}
+
+func TestUserResource_WorkEmailUsedAsUsername(t *testing.T) {
+	user := client.User{
+		ID:          "user-we-1",
+		Username:    "personal@gmail.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Alice Smith",
+		Emails:      []client.Email{{Value: "alice@example.com", Type: "WORK"}},
+	}
+	worker := &client.Worker{
+		ID:        "worker-we-1",
+		UserID:    "user-we-1",
+		Status:    "ACTIVE",
+		WorkEmail: "alice@company.com",
+	}
+
+	r, err := userResource(context.Background(), user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "alice@company.com", fields["username"].GetStringValue())
+	assert.Equal(t, "personal@gmail.com", fields["rippling_username"].GetStringValue())
+	assert.Equal(t, "alice@company.com", trait.GetPrimaryEmail())
+	assert.Contains(t, trait.GetLogin(), "alice@company.com")
+}
+
+func TestUserResource_FallbackToWorkTypeEmail(t *testing.T) {
+	user := client.User{
+		ID:          "user-we-2",
+		Username:    "personal@gmail.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Bob Jones",
+		Emails:      []client.Email{{Value: "bob@company.com", Type: "WORK"}},
+	}
+	worker := &client.Worker{
+		ID:        "worker-we-2",
+		UserID:    "user-we-2",
+		Status:    "ACTIVE",
+		WorkEmail: "",
+	}
+
+	r, err := userResource(context.Background(), user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "bob@company.com", fields["username"].GetStringValue())
+	assert.Equal(t, "personal@gmail.com", fields["rippling_username"].GetStringValue())
+}
+
+func TestUserResource_FallbackToRipplingUsername(t *testing.T) {
+	user := client.User{
+		ID:          "user-we-3",
+		Username:    "carol@personal.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Carol Lee",
+		Emails:      []client.Email{{Value: "carol@personal.com", Type: "HOME"}},
+	}
+	worker := &client.Worker{
+		ID:        "worker-we-3",
+		UserID:    "user-we-3",
+		Status:    "ACTIVE",
+		WorkEmail: "",
+	}
+
+	r, err := userResource(context.Background(), user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "carol@personal.com", fields["username"].GetStringValue())
+	assert.Nil(t, fields["rippling_username"], "rippling_username should not be set when it equals login")
+}
+
+func TestUserResource_NoWorkerFallbackToUsername(t *testing.T) {
+	user := client.User{
+		ID:          "user-we-4",
+		Username:    "dave@personal.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Dave Kim",
+		Emails:      nil,
+	}
+
+	r, err := userResource(context.Background(), user, nil, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "dave@personal.com", fields["username"].GetStringValue())
+	assert.Nil(t, fields["rippling_username"], "rippling_username should not be set when it equals login")
+}
+
+func TestUserResource_WorkEmailSameAsUsername(t *testing.T) {
+	user := client.User{
+		ID:          "user-we-5",
+		Username:    "eve@company.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Eve Wu",
+		Emails:      []client.Email{{Value: "eve@company.com", Type: "WORK"}},
+	}
+	worker := &client.Worker{
+		ID:        "worker-we-5",
+		UserID:    "user-we-5",
+		Status:    "ACTIVE",
+		WorkEmail: "eve@company.com",
+	}
+
+	r, err := userResource(context.Background(), user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+	fields := trait.GetProfile().GetFields()
+
+	assert.Equal(t, "eve@company.com", fields["username"].GetStringValue())
+	assert.Nil(t, fields["rippling_username"], "rippling_username should not be set when username matches login")
 }

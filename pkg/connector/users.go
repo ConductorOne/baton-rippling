@@ -42,11 +42,28 @@ func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 	return userResourceType
 }
 
-func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
+func userResource(ctx context.Context, user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
+	login := user.Username
+	if worker != nil && worker.WorkEmail != "" {
+		login = worker.WorkEmail
+	} else if we := getWorkEmail(user.Emails); we != nil && we.Value != "" && strings.EqualFold(we.Type, workType) {
+		login = we.Value
+	} else {
+		l := ctxzap.Extract(ctx)
+		l.Warn("no work email available for user, falling back to Rippling username",
+			zap.String("user_id", user.ID),
+			zap.String("username", user.Username),
+		)
+	}
+
 	profile := map[string]any{
-		"username": user.Username,
+		"username": login,
 		"active":   user.Active,
 		"locale":   user.Locale,
+	}
+
+	if user.Username != "" && user.Username != login {
+		profile["rippling_username"] = user.Username
 	}
 
 	// Name fields from User
@@ -250,12 +267,16 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		resource.WithUserProfile(profile),
 		resource.WithCreatedAt(createdAt),
 		resource.WithStatus(userStatus),
-		resource.WithUserLogin(user.Username),
+		resource.WithUserLogin(login),
 	}
 
-	email := getWorkEmail(user.Emails)
-	if email != nil {
-		userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workType)))
+	if worker != nil && worker.WorkEmail != "" {
+		userOpts = append(userOpts, resource.WithEmail(worker.WorkEmail, true))
+	} else {
+		email := getWorkEmail(user.Emails)
+		if email != nil {
+			userOpts = append(userOpts, resource.WithEmail(email.Value, strings.EqualFold(email.Type, workType)))
+		}
 	}
 
 	return resource.NewUserResource(
@@ -390,7 +411,7 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			}
 		}
 
-		r, err := userResource(user, workerPtr, workLocationPtr, o.customFieldNames)
+		r, err := userResource(ctx, user, workerPtr, workLocationPtr, o.customFieldNames)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
