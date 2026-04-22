@@ -43,18 +43,7 @@ func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
 }
 
 func userResource(ctx context.Context, user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
-	login := user.Username
-	if worker != nil && worker.WorkEmail != "" {
-		login = worker.WorkEmail
-	} else if we := getWorkEmail(user.Emails); we != nil && we.Value != "" && strings.EqualFold(we.Type, workType) {
-		login = we.Value
-	} else {
-		l := ctxzap.Extract(ctx)
-		l.Warn("no work email available for user, falling back to Rippling username",
-			zap.String("user_id", user.ID),
-			zap.String("username", user.Username),
-		)
-	}
+	login := resolveLogin(ctx, user, worker)
 
 	profile := map[string]any{
 		"username": login,
@@ -445,6 +434,25 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 		// Phase 3: page through users, looking up cached workers and locations per-user.
 		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
 	}
+}
+
+func resolveLogin(ctx context.Context, user client.User, worker *client.Worker) string {
+	if worker != nil && worker.WorkEmail != "" {
+		return worker.WorkEmail
+	}
+
+	email := getWorkEmail(user.Emails)
+	if email != nil && email.Value != "" && strings.EqualFold(email.Type, workType) {
+		return email.Value
+	}
+
+	l := ctxzap.Extract(ctx)
+	l.Warn("no work email available for user, falling back to Rippling username",
+		zap.String("user_id", user.ID),
+		zap.String("username", user.Username),
+	)
+
+	return user.Username
 }
 
 func getWorkEmail(emails []client.Email) *client.Email {
