@@ -567,3 +567,121 @@ func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
 	// Built-in "title" from worker.Title should be preserved, not overwritten
 	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
 }
+
+func TestUserResource_LoginAlias_FromWorkerWorkEmail(t *testing.T) {
+	user := client.User{
+		ID:          "user-alias-1",
+		Username:    "alice.personal@gmail.com",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Alice Smith",
+	}
+	worker := &client.Worker{
+		ID:        "worker-alias-1",
+		UserID:    "user-alias-1",
+		Status:    "ACTIVE",
+		WorkEmail: "alice@company.com",
+	}
+
+	r, err := userResource(user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	assert.Equal(t, "alice.personal@gmail.com", trait.GetLogin(), "primary login should remain user.Username")
+	assert.Equal(t, []string{"alice@company.com"}, trait.GetLoginAliases(), "worker.WorkEmail should be a login alias")
+}
+
+func TestUserResource_LoginAlias_FallbackToWorkTypeEmail(t *testing.T) {
+	user := client.User{
+		ID:          "user-alias-2",
+		Username:    "bob.personal@gmail.com",
+		Active:      true,
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Bob Jones",
+		Emails: []client.Email{
+			{Value: "bob.personal@gmail.com", Type: "HOME"},
+			{Value: "bob@company.com", Type: "WORK"},
+		},
+	}
+	// Worker present but WorkEmail empty — the WORK-typed email on user should be used as the alias.
+	worker := &client.Worker{
+		ID:     "worker-alias-2",
+		UserID: "user-alias-2",
+		Status: "ACTIVE",
+	}
+
+	r, err := userResource(user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	assert.Equal(t, "bob.personal@gmail.com", trait.GetLogin())
+	assert.Equal(t, []string{"bob@company.com"}, trait.GetLoginAliases())
+}
+
+func TestUserResource_LoginAlias_NoAliasWhenWorkEmailMatchesUsername(t *testing.T) {
+	user := client.User{
+		ID:          "user-alias-3",
+		Username:    "carol@company.com",
+		Active:      true,
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Carol Lee",
+	}
+	worker := &client.Worker{
+		ID:        "worker-alias-3",
+		UserID:    "user-alias-3",
+		Status:    "ACTIVE",
+		WorkEmail: "CAROL@company.com",
+	}
+
+	r, err := userResource(user, worker, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	assert.Equal(t, "carol@company.com", trait.GetLogin())
+	assert.Empty(t, trait.GetLoginAliases(), "no alias expected when work email matches username (case-insensitive)")
+}
+
+func TestUserResource_LoginAlias_NoAliasWhenNoWorkEmailAvailable(t *testing.T) {
+	user := client.User{
+		ID:          "user-alias-4",
+		Username:    "dave",
+		Active:      true,
+		CreatedAt:   "2024-01-01T00:00:00Z",
+		DisplayName: "Dave Kim",
+		Emails: []client.Email{
+			{Value: "dave@home.example", Type: "HOME"},
+		},
+	}
+
+	r, err := userResource(user, nil, nil, nil)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	trait, err := resource.GetUserTrait(r)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	assert.Equal(t, "dave", trait.GetLogin())
+	assert.Empty(t, trait.GetLoginAliases())
+}
