@@ -36,12 +36,12 @@ type userBuilder struct {
 	client              *client.Client
 	expandWorkLocations bool
 	customFieldNames    []string
-
-	// metrics aggregates per-sync diagnostic counters. Allocated on the
-	// first List() page (token == "") and flushed on the last page
-	// (NextPageToken == ""). May be read from Grants() callbacks fired
-	// by the SDK after List() pages.
-	metrics *syncMetrics
+	// NOTE: do not add per-sync state here. The Lambda runtime can
+	// recycle the struct between SDK calls, reload it on config change,
+	// and serve concurrent invocations. Per-call diagnostic state is
+	// allocated locally inside List/Grants and flushed via Datadog
+	// summary logs tagged with sync_id. See
+	// ~/.claude/skills/baton-runtime/SKILL.md.
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
@@ -314,7 +314,7 @@ func (o *userBuilder) listWorkLocationPage(ctx context.Context, pageToken string
 
 // listWorkerPage fetches one page of workers from the API and stores them in
 // the session store. Returns no resources — this phase only populates the cache.
-func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
 	workersResponse, ratelimitData, err := o.client.ListWorkers(ctx, pageToken)
 	annos = *annos.WithRateLimiting(ratelimitData)
@@ -328,8 +328,9 @@ func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss s
 		if worker.UserID == "" {
 			// Root cause C: workers with empty UserID are silently
 			// dropped today. PR 1 just counts and (samples) logs them.
-			o.metrics.recordDroppedEmptyUserID()
+			metrics.recordDroppedEmptyUserID()
 			l.Warn("baton-rippling: worker has empty user_id; cannot key into session cache",
+				metrics.syncIDField(),
 				zap.String("worker_id", worker.ID),
 				zap.String("worker_status", worker.Status),
 			)
@@ -340,8 +341,9 @@ func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss s
 		// PR 1 detects the collision and counts it; PR 2 will replace
 		// the collapse with a deterministic precedence merge.
 		if existing, collide := toStore[worker.UserID]; collide {
-			o.metrics.recordRehireCollision()
+			metrics.recordRehireCollision()
 			l.Warn("baton-rippling: re-hire collision in worker cache (last-write-wins)",
+				metrics.syncIDField(),
 				zap.String("user_id", worker.UserID),
 				zap.String("incoming_worker_id", worker.ID),
 				zap.String("incoming_status", worker.Status),
@@ -371,7 +373,7 @@ func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss s
 }
 
 // listUserPage fetches one page of users, enriching each with its cached worker data.
-func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
 	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pageToken)
 	annos = *annos.WithRateLimiting(ratelimitData)
@@ -421,7 +423,7 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 			// the user appeared in /users but no worker was cached.
 			// PR 1 counts and (samples) logs; PR 3 will refetch on
 			// demand and fail-on-error.
-			o.metrics.recordCacheMissInListUsers()
+			metrics.recordCacheMissInListUsers()
 		}
 
 		var workLocationPtr *client.WorkLocation
@@ -438,8 +440,9 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		// logs for diagnosis; the per-sync summary captures totals.
 		_, reason := deriveUserStatus(workerPtr)
 		if reason != "" {
-			if o.metrics.recordWouldEmitNonEnabled(reason) {
+			if metrics.recordWouldEmitNonEnabled(reason) {
 				fields := []zap.Field{
+					metrics.syncIDField(),
 					zap.String("user_id", user.ID),
 					zap.String("reason", reason),
 				}
@@ -474,27 +477,20 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	token := opts.PageToken.Token
 
-	// Allocate per-sync metrics on the first page. Persist across all
-	// subsequent pages (and into Grants() callbacks) until either the
-	// next sync starts (next token == "") or the SDK calls List()
-	// again with a fresh empty token.
-	if token == "" || o.metrics == nil {
-		o.metrics = newSyncMetrics()
-	}
+	// Per-call metrics. Stamped with the sync ID so Datadog can sum
+	// the per-page summaries within a sync. No struct state, no
+	// cross-call assumptions — see comment on userBuilder.
+	metrics := newSyncMetrics(opts.SyncID)
 
-	rv, results, err := o.dispatchListPage(ctx, opts, token)
+	rv, results, err := o.dispatchListPage(ctx, opts, token, metrics)
 
-	// Flush the summary at the end of the user-listing phase. If
-	// Grants() runs after this point and writes more counters, those
-	// will be partial — Datadog still has the per-event WARN samples
-	// for diagnosis.
-	if err == nil && results != nil && results.NextPageToken == "" {
-		o.metrics.emitSummary(ctx)
+	if err == nil && metrics.hasEvents() {
+		metrics.emitSummary(ctx)
 	}
 	return rv, results, err
 }
 
-func (o *userBuilder) dispatchListPage(ctx context.Context, opts resource.SyncOpAttrs, token string) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) dispatchListPage(ctx context.Context, opts resource.SyncOpAttrs, token string, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	switch {
 	case o.expandWorkLocations && (token == "" || strings.HasPrefix(token, locationsPagePrefix)):
 		// Phase 1 (optional): page through work locations, storing each in the session store.
@@ -502,11 +498,11 @@ func (o *userBuilder) dispatchListPage(ctx context.Context, opts resource.SyncOp
 
 	case token == "" || strings.HasPrefix(token, workersPagePrefix):
 		// Phase 2: page through workers, storing each page in the session store.
-		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
+		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session, metrics)
 
 	default:
 		// Phase 3: page through users, looking up cached workers and locations per-user.
-		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
+		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session, metrics)
 	}
 }
 
@@ -576,6 +572,11 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 // Grants returns team membership grants for this user by looking up the user's
 // worker record from the session store and creating a grant for each team.
 func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
+	// Per-call metrics. The SDK calls Grants() once per resource, so
+	// each invocation is its own diagnostic scope. Datadog aggregates
+	// across calls via the sync_id label on every emitted log.
+	metrics := newSyncMetrics(opts.SyncID)
+
 	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", r.Id.Resource, err)
@@ -586,8 +587,9 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 		// revocation. PR 1 upgrades the log to WARN and counts;
 		// PR 3 will refetch on demand and fail-on-error.
 		l := ctxzap.Extract(ctx)
-		o.metrics.recordCacheMissInGrants()
+		metrics.recordCacheMissInGrants()
 		l.Warn("baton-rippling: no worker found for user; emitting zero grants (silent-revocation hazard)",
+			metrics.syncIDField(),
 			zap.String("user_id", r.Id.Resource),
 		)
 		return nil, nil, nil
@@ -597,8 +599,9 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 		// PR 5 will reverse this so JML keys off status, not grant
 		// presence. PR 1 just counts.
 		l := ctxzap.Extract(ctx)
-		o.metrics.recordTerminatedSkipInGrants()
+		metrics.recordTerminatedSkipInGrants()
 		l.Warn("baton-rippling: worker is terminated; emitting zero grants",
+			metrics.syncIDField(),
 			zap.String("user_id", r.Id.Resource),
 			zap.String("worker_status", worker.Status),
 		)

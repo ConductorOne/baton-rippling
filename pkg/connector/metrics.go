@@ -8,21 +8,27 @@ import (
 	"go.uber.org/zap"
 )
 
-// syncMetrics aggregates per-sync diagnostic counters for the user
-// builder. It is allocated at the start of a sync (List token == "")
-// and flushed as a single INFO summary at the end (NextPageToken == "").
+// syncMetrics aggregates diagnostic counters for **a single SDK call**
+// (one List() or one Grants() invocation). It is intentionally
+// per-call, not per-sync: storing per-sync state on the connector
+// builder is unsafe in the production Lambda runtime where the
+// container can recycle, reload, or be hit concurrently between SDK
+// calls. See ~/.claude/skills/baton-runtime/SKILL.md.
 //
-// Per-event WARN logs at the same sites are sampled (capped at
-// sampledWarningCap) so a 10K-user tenant with a 5% miss rate does not
-// emit 500 individual WARN events to Datadog. The summary at end of
-// sync provides the totals; the sampled events provide spot-check
-// payloads for diagnosis.
+// Aggregation across calls happens in Datadog — every WARN/INFO log
+// emitted from this struct includes `sync_id` so log queries can sum
+// counters per sync without any in-process accumulation.
 //
-// Methods are safe for concurrent use; the underlying connector flow
-// is currently sequential, but Grants() may be called by the SDK in a
-// different goroutine context than List().
+// Per-event WARN logs are sampled (capped at sampledWarningCap per
+// call) so a 10K-user tenant does not emit hundreds of individual
+// WARN events. The end-of-call INFO summary captures the totals for
+// that call.
 type syncMetrics struct {
 	mu sync.Mutex
+
+	// syncID is stamped onto every log emitted from this metrics
+	// instance, so Datadog can group across calls within the sync.
+	syncID string
 
 	// Diagnostic counters. Each increment represents one user that the
 	// connector is about to emit in a state that puts them at risk of
@@ -43,8 +49,9 @@ type syncMetrics struct {
 
 const sampledWarningCap = 50
 
-func newSyncMetrics() *syncMetrics {
+func newSyncMetrics(syncID string) *syncMetrics {
 	return &syncMetrics{
+		syncID:              syncID,
 		wouldEmitNonEnabled: make(map[string]int),
 	}
 }
@@ -112,11 +119,33 @@ func (m *syncMetrics) recordTerminatedSkipInGrants() {
 	m.mu.Unlock()
 }
 
-// emitSummary writes one structured INFO log with the totals. The
-// would_emit_non_enabled_total is the directly incident-relevant
-// metric: every increment represents one user whose all-user-access
-// CEL evaluation would flip to fail under the customer's current
-// directory-status check.
+// hasEvents reports whether anything was counted. Callers use this to
+// skip emitting an empty summary log on every Grants() call (one per
+// resource → 10K log lines per sync would otherwise be common).
+func (m *syncMetrics) hasEvents() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.wouldEmitNonEnabled) > 0 {
+		return true
+	}
+	return m.cacheMissesInListUsers > 0 ||
+		m.cacheMissesInGrants > 0 ||
+		m.rehireCollisions > 0 ||
+		m.droppedEmptyUserIDs > 0 ||
+		m.terminatedSkipsInGrants > 0
+}
+
+// emitSummary writes one structured INFO log with the totals for this
+// SDK call. Every log line includes `sync_id` so Datadog queries can
+// aggregate across the per-call summaries within a single sync.
+//
+// Datadog query example (sum cascade-blast-radius events for a sync):
+//
+//	service:baton-rippling "sync metrics summary" @sync_id:<id>
+//	| stats sum(@would_emit_non_enabled_total) as total
 func (m *syncMetrics) emitSummary(ctx context.Context) {
 	if m == nil {
 		return
@@ -132,6 +161,7 @@ func (m *syncMetrics) emitSummary(ctx context.Context) {
 	}
 
 	ctxzap.Extract(ctx).Info("baton-rippling: sync metrics summary",
+		zap.String("sync_id", m.syncID),
 		zap.Int("would_emit_non_enabled_total", total),
 		zap.Any("would_emit_non_enabled_by_reason", byReason),
 		zap.Int("cache_misses_list_users", m.cacheMissesInListUsers),
@@ -140,6 +170,17 @@ func (m *syncMetrics) emitSummary(ctx context.Context) {
 		zap.Int("dropped_empty_user_ids", m.droppedEmptyUserIDs),
 		zap.Int("terminated_skips_grants", m.terminatedSkipsInGrants),
 	)
+}
+
+// syncIDField returns a zap.Field wrapping the sync_id for use on
+// per-event WARN logs, so Datadog can group those events by sync too.
+func (m *syncMetrics) syncIDField() zap.Field {
+	if m == nil {
+		return zap.Skip()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return zap.String("sync_id", m.syncID)
 }
 
 // Diagnostic reasons. Used as label values for the
