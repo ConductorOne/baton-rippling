@@ -36,6 +36,12 @@ type userBuilder struct {
 	client              *client.Client
 	expandWorkLocations bool
 	customFieldNames    []string
+	// NOTE: do not add per-sync state here. The Lambda runtime can
+	// recycle the struct between SDK calls, reload it on config change,
+	// and serve concurrent invocations. Per-call diagnostic state is
+	// allocated locally inside List/Grants and flushed via Datadog
+	// summary logs tagged with sync_id. See
+	// ~/.claude/skills/baton-runtime/SKILL.md.
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
@@ -235,16 +241,13 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		return nil, fmt.Errorf("baton-rippling: failed to parse created_at for user %s: %w", user.ID, err)
 	}
 
-	// Derive user status from worker status.
-	var userStatus v2.UserTrait_Status_Status
-	if worker != nil {
-		switch worker.Status {
-		case "ACTIVE":
-			userStatus = v2.UserTrait_Status_STATUS_ENABLED
-		case "TERMINATED":
-			userStatus = v2.UserTrait_Status_STATUS_DISABLED
-		}
-	}
+	// Derive user status from worker status. PR 1 keeps the existing
+	// mapping (only ACTIVE → ENABLED, only TERMINATED → DISABLED;
+	// everything else falls through to UNSPECIFIED) — visibility is
+	// added at the call sites in listUserPage and Grants, not here.
+	// userResource() stays a pure builder so its tests do not need to
+	// thread context or metrics state.
+	userStatus, _ := deriveUserStatus(worker)
 
 	// Rippling's user.Username is not guaranteed to be the work email — it can
 	// be a personal/pre-boarding address. Emit the work email as a login alias
@@ -311,7 +314,7 @@ func (o *userBuilder) listWorkLocationPage(ctx context.Context, pageToken string
 
 // listWorkerPage fetches one page of workers from the API and stores them in
 // the session store. Returns no resources — this phase only populates the cache.
-func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
 	workersResponse, ratelimitData, err := o.client.ListWorkers(ctx, pageToken)
 	annos = *annos.WithRateLimiting(ratelimitData)
@@ -319,11 +322,36 @@ func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss s
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
 	}
 
+	l := ctxzap.Extract(ctx)
 	toStore := make(map[string]client.Worker, len(workersResponse.Results))
 	for _, worker := range workersResponse.Results {
-		if worker.UserID != "" {
-			toStore[worker.UserID] = worker
+		if worker.UserID == "" {
+			// Root cause C: workers with empty UserID are silently
+			// dropped today. PR 1 just counts and (samples) logs them.
+			metrics.recordDroppedEmptyUserID()
+			l.Warn("baton-rippling: worker has empty user_id; cannot key into session cache",
+				metrics.syncIDField(),
+				zap.String("worker_id", worker.ID),
+				zap.String("worker_status", worker.Status),
+			)
+			continue
 		}
+		// Root cause G: re-hires produce multiple Worker records sharing
+		// a UserID. Today this map collapses them to last-write-wins.
+		// PR 1 detects the collision and counts it; PR 2 will replace
+		// the collapse with a deterministic precedence merge.
+		if existing, collide := toStore[worker.UserID]; collide {
+			metrics.recordRehireCollision()
+			l.Warn("baton-rippling: re-hire collision in worker cache (last-write-wins)",
+				metrics.syncIDField(),
+				zap.String("user_id", worker.UserID),
+				zap.String("incoming_worker_id", worker.ID),
+				zap.String("incoming_status", worker.Status),
+				zap.String("existing_worker_id", existing.ID),
+				zap.String("existing_status", existing.Status),
+			)
+		}
+		toStore[worker.UserID] = worker
 	}
 	if len(toStore) > 0 {
 		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
@@ -345,7 +373,7 @@ func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss s
 }
 
 // listUserPage fetches one page of users, enriching each with its cached worker data.
-func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
 	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pageToken)
 	annos = *annos.WithRateLimiting(ratelimitData)
@@ -384,17 +412,47 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		}
 	}
 
+	l := ctxzap.Extract(ctx)
 	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
 	for _, user := range usersResponse.Results {
 		var workerPtr *client.Worker
 		if worker, found := workers[user.ID]; found {
 			workerPtr = &worker
+		} else {
+			// Root cause B (cross-API drift) and C (empty user_id):
+			// the user appeared in /users but no worker was cached.
+			// PR 1 counts and (samples) logs; PR 3 will refetch on
+			// demand and fail-on-error.
+			metrics.recordCacheMissInListUsers()
 		}
 
 		var workLocationPtr *client.WorkLocation
 		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
 			if wl, ok := workLocations[workerPtr.Location.WorkLocationID]; ok {
 				workLocationPtr = &wl
+			}
+		}
+
+		// Cascade-blast-radius accounting. Every user about to be
+		// emitted as non-`STATUS_ENABLED` is one user whose all-user-
+		// access CEL evaluation flips to fail under the customer's
+		// directory-status check. Sample a subset of these as WARN
+		// logs for diagnosis; the per-sync summary captures totals.
+		_, reason := deriveUserStatus(workerPtr)
+		if reason != "" {
+			if metrics.recordWouldEmitNonEnabled(reason) {
+				fields := []zap.Field{
+					metrics.syncIDField(),
+					zap.String("user_id", user.ID),
+					zap.String("reason", reason),
+				}
+				if workerPtr != nil {
+					fields = append(fields,
+						zap.String("worker_id", workerPtr.ID),
+						zap.String("worker_status", workerPtr.Status),
+					)
+				}
+				l.Warn("baton-rippling: emitting user with non-ENABLED status (cascade-blast-radius event)", fields...)
 			}
 		}
 
@@ -419,6 +477,20 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	token := opts.PageToken.Token
 
+	// Per-call metrics. Stamped with the sync ID so Datadog can sum
+	// the per-page summaries within a sync. No struct state, no
+	// cross-call assumptions — see comment on userBuilder.
+	metrics := newSyncMetrics(opts.SyncID)
+
+	rv, results, err := o.dispatchListPage(ctx, opts, token, metrics)
+
+	if err == nil && metrics.hasEvents() {
+		metrics.emitSummary(ctx)
+	}
+	return rv, results, err
+}
+
+func (o *userBuilder) dispatchListPage(ctx context.Context, opts resource.SyncOpAttrs, token string, metrics *syncMetrics) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	switch {
 	case o.expandWorkLocations && (token == "" || strings.HasPrefix(token, locationsPagePrefix)):
 		// Phase 1 (optional): page through work locations, storing each in the session store.
@@ -426,11 +498,42 @@ func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.
 
 	case token == "" || strings.HasPrefix(token, workersPagePrefix):
 		// Phase 2: page through workers, storing each page in the session store.
-		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
+		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session, metrics)
 
 	default:
 		// Phase 3: page through users, looking up cached workers and locations per-user.
-		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
+		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session, metrics)
+	}
+}
+
+// deriveUserStatus maps a Rippling Worker.Status (or worker absence)
+// to a UserTrait_Status_Status. The second return is a diagnostic
+// reason for any non-ENABLED outcome, used by callers to count and
+// log the cascade-blast-radius metric. Empty string for the ENABLED
+// case.
+//
+// PR 1 keeps the existing behavior: only ACTIVE produces ENABLED,
+// only TERMINATED produces DISABLED, everything else is UNSPECIFIED.
+// The full enum is enumerated explicitly here so the visibility
+// instrumentation at the call sites can attribute reasons accurately,
+// and so the case arms exist for PR 4 to fill in.
+func deriveUserStatus(worker *client.Worker) (v2.UserTrait_Status_Status, string) {
+	if worker == nil {
+		return v2.UserTrait_Status_STATUS_UNSPECIFIED, reasonWorkerNil
+	}
+	switch worker.Status {
+	case "ACTIVE":
+		return v2.UserTrait_Status_STATUS_ENABLED, ""
+	case "TERMINATED":
+		return v2.UserTrait_Status_STATUS_DISABLED, reasonWorkerTerminated
+	case "HIRED", "ACCEPTED":
+		return v2.UserTrait_Status_STATUS_UNSPECIFIED, reasonWorkerPreHire
+	case "INIT":
+		return v2.UserTrait_Status_STATUS_UNSPECIFIED, reasonWorkerInit
+	case "":
+		return v2.UserTrait_Status_STATUS_UNSPECIFIED, reasonWorkerStatusEmpty
+	default:
+		return v2.UserTrait_Status_STATUS_UNSPECIFIED, reasonWorkerStatusUnknown
 	}
 }
 
@@ -469,18 +572,39 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 // Grants returns team membership grants for this user by looking up the user's
 // worker record from the session store and creating a grant for each team.
 func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
+	// Per-call metrics. The SDK calls Grants() once per resource, so
+	// each invocation is its own diagnostic scope. Datadog aggregates
+	// across calls via the sync_id label on every emitted log.
+	metrics := newSyncMetrics(opts.SyncID)
+
 	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", r.Id.Resource, err)
 	}
 	if !found {
+		// Root cause B/C: cache miss in Grants. Today this silently
+		// emits zero grants — JML reads "grant disappeared" as a
+		// revocation. PR 1 upgrades the log to WARN and counts;
+		// PR 3 will refetch on demand and fail-on-error.
 		l := ctxzap.Extract(ctx)
-		l.Debug("no worker found for user, skipping team grants", zap.String("user_id", r.Id.Resource))
+		metrics.recordCacheMissInGrants()
+		l.Warn("baton-rippling: no worker found for user; emitting zero grants (silent-revocation hazard)",
+			metrics.syncIDField(),
+			zap.String("user_id", r.Id.Resource),
+		)
 		return nil, nil, nil
 	}
 	if worker.Status == "TERMINATED" {
+		// Root cause F: TERMINATED workers emit zero grants today.
+		// PR 5 will reverse this so JML keys off status, not grant
+		// presence. PR 1 just counts.
 		l := ctxzap.Extract(ctx)
-		l.Debug("worker is terminated, skipping team grants", zap.String("user_id", r.Id.Resource))
+		metrics.recordTerminatedSkipInGrants()
+		l.Warn("baton-rippling: worker is terminated; emitting zero grants",
+			metrics.syncIDField(),
+			zap.String("user_id", r.Id.Resource),
+			zap.String("worker_status", worker.Status),
+		)
 		return nil, nil, nil
 	}
 
