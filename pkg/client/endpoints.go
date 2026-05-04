@@ -60,9 +60,6 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 	return &workers, rl, nil
 }
 
-// GetWorkersByUserID fetches workers via filter=user_id+eq+'<id>'. Used to
-// recover from /workers cursor-walk misses. Returns a slice because Rippling
-// permits multiple Worker records per user_id (re-hire case).
 func (c *Client) GetWorkersByUserID(ctx context.Context, userID string) (*WorkersResponse, *v2.RateLimitDescription, error) {
 	u, _ := url.Parse(c.workersURL())
 	q := u.Query()
