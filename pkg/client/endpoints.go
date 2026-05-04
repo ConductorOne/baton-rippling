@@ -60,6 +60,26 @@ func (c *Client) ListWorkers(ctx context.Context, nextLink string) (*WorkersResp
 	return &workers, rl, nil
 }
 
+// GetWorkersByUserID fetches workers via filter=user_id+eq+'<id>'. Used to
+// recover from /workers cursor-walk misses. Returns a slice because Rippling
+// permits multiple Worker records per user_id (re-hire case).
+func (c *Client) GetWorkersByUserID(ctx context.Context, userID string) (*WorkersResponse, *v2.RateLimitDescription, error) {
+	u, _ := url.Parse(c.workersURL())
+	q := u.Query()
+	q.Set("filter", fmt.Sprintf("user_id eq '%s'", userID))
+	if expand := c.buildExpandParam(); expand != "" {
+		q.Set("expand", expand)
+	}
+	u.RawQuery = q.Encode()
+
+	var workers WorkersResponse
+	rl, err := c.doGet(ctx, u.String(), "", &workers)
+	if err != nil {
+		return nil, rl, fmt.Errorf("failed to fetch worker by user_id %s: %w", userID, err)
+	}
+	return &workers, rl, nil
+}
+
 func (c *Client) ListTeams(ctx context.Context, nextLink string) (*TeamsResponse, *v2.RateLimitDescription, error) {
 	var teams TeamsResponse
 	rl, err := c.doGet(ctx, c.teamsURL(), nextLink, &teams)
