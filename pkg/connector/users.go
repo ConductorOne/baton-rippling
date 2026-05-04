@@ -390,7 +390,8 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 		if worker, found := workers[user.ID]; found {
 			workerPtr = &worker
 		} else {
-			recovered, err := o.fetchWorker(ctx, user.ID)
+			recovered, rl, err := o.fetchWorker(ctx, user.ID)
+			annos = *annos.WithRateLimiting(rl)
 			if err != nil {
 				return nil, &resource.SyncOpResults{Annotations: annos}, err
 			}
@@ -475,25 +476,26 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 // Grants returns team membership grants for this user by looking up the user's
 // worker record from the session store and creating a grant for each team.
 func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
+	var annos annotations.Annotations
 	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-rippling: failed to get worker for user %s from session store: %w", r.Id.Resource, err)
 	}
 	if !found {
-		recovered, err := o.fetchWorker(ctx, r.Id.Resource)
+		recovered, rl, err := o.fetchWorker(ctx, r.Id.Resource)
+		annos = *annos.WithRateLimiting(rl)
 		if err != nil {
-			return nil, nil, err
+			return nil, &resource.SyncOpResults{Annotations: annos}, err
 		}
 		if recovered == nil {
 			ctxzap.Extract(ctx).Debug("no worker exists for user, skipping team grants", zap.String("user_id", r.Id.Resource))
-			return nil, nil, nil
+			return nil, &resource.SyncOpResults{Annotations: annos}, nil
 		}
 		worker = *recovered
 	}
 	if worker.Status == "TERMINATED" {
-		l := ctxzap.Extract(ctx)
-		l.Debug("worker is terminated, skipping team grants", zap.String("user_id", r.Id.Resource))
-		return nil, nil, nil
+		ctxzap.Extract(ctx).Debug("worker is terminated, skipping team grants", zap.String("user_id", r.Id.Resource))
+		return nil, &resource.SyncOpResults{Annotations: annos}, nil
 	}
 
 	rv := make([]*v2.Grant, 0, len(worker.TeamsID))
@@ -510,24 +512,28 @@ func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.
 		))
 	}
 
-	return rv, nil, nil
+	return rv, &resource.SyncOpResults{Annotations: annos}, nil
 }
 
-// fetchWorker fetches a worker by user_id via the /workers filter API. Used
-// to recover from /workers cursor-walk misses where a user appears in /users
-// but the bulk pagination did not return their worker. A nil result means
-// Rippling has no worker for this user (legitimate admin/system account);
-// fetch errors fail the sync to keep the previous-good .c1z canonical.
-func (o *userBuilder) fetchWorker(ctx context.Context, userID string) (*client.Worker, error) {
-	resp, _, err := o.client.GetWorkersByUserID(ctx, userID)
+// Fallback for users the /workers pagination missed.
+//
+// Someone who has been rehired may have more than one worker record. We
+// use the most recently updated one.
+func (o *userBuilder) fetchWorker(ctx context.Context, userID string) (*client.Worker, *v2.RateLimitDescription, error) {
+	resp, rl, err := o.client.GetWorkersByUserID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("baton-rippling: on-demand worker fetch failed for user %s: %w", userID, err)
+		return nil, rl, fmt.Errorf("baton-rippling: on-demand worker fetch failed for user %s: %w", userID, err)
 	}
 	if len(resp.Results) == 0 {
-		return nil, nil
+		return nil, rl, nil
 	}
 	chosen := resp.Results[0]
-	return &chosen, nil
+	for _, w := range resp.Results[1:] {
+		if w.UpdatedAt > chosen.UpdatedAt {
+			chosen = w
+		}
+	}
+	return &chosen, rl, nil
 }
 
 func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {
