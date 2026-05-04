@@ -4,9 +4,75 @@ import (
 	"testing"
 
 	"github.com/conductorone/baton-rippling/pkg/client"
+	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestDeriveUserStatus(t *testing.T) {
+	cases := []struct {
+		name       string
+		worker     *client.Worker
+		wantStatus v2.UserTrait_Status_Status
+		wantReason string
+	}{
+		{
+			name:       "nil worker — cache miss or admin/system account",
+			worker:     nil,
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerNil,
+		},
+		{
+			name:       "ACTIVE — happy path",
+			worker:     &client.Worker{Status: "ACTIVE"},
+			wantStatus: v2.UserTrait_Status_STATUS_ENABLED,
+			wantReason: "",
+		},
+		{
+			name:       "TERMINATED",
+			worker:     &client.Worker{Status: "TERMINATED"},
+			wantStatus: v2.UserTrait_Status_STATUS_DISABLED,
+			wantReason: reasonWorkerTerminated,
+		},
+		{
+			name:       "HIRED — pre-hire (PR 1: still UNSPECIFIED)",
+			worker:     &client.Worker{Status: "HIRED"},
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerPreHire,
+		},
+		{
+			name:       "ACCEPTED — pre-hire (PR 1: still UNSPECIFIED)",
+			worker:     &client.Worker{Status: "ACCEPTED"},
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerPreHire,
+		},
+		{
+			name:       "INIT — draft worker",
+			worker:     &client.Worker{Status: "INIT"},
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerInit,
+		},
+		{
+			name:       "empty status — malformed/partial Rippling response",
+			worker:     &client.Worker{Status: ""},
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerStatusEmpty,
+		},
+		{
+			name:       "LEAVE — undocumented future status",
+			worker:     &client.Worker{Status: "LEAVE"},
+			wantStatus: v2.UserTrait_Status_STATUS_UNSPECIFIED,
+			wantReason: reasonWorkerStatusUnknown,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotStatus, gotReason := deriveUserStatus(tc.worker)
+			assert.Equal(t, tc.wantStatus, gotStatus)
+			assert.Equal(t, tc.wantReason, gotReason)
+		})
+	}
+}
 
 func TestUserResource_NoWorker(t *testing.T) {
 	user := client.User{
@@ -102,13 +168,13 @@ func TestUserResource_WithFullWorker(t *testing.T) {
 
 func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 	user := client.User{
-		ID:        "user-3",
-		Username:  "carol",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-03-01T00:00:00Z",
+		ID:          "user-3",
+		Username:    "carol",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-03-01T00:00:00Z",
 		DisplayName: "Carol Lee",
-		Emails:    []client.Email{{Value: "carol@example.com"}},
+		Emails:      []client.Email{{Value: "carol@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:             "worker-3",
@@ -129,13 +195,13 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 
 func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 	user := client.User{
-		ID:        "user-4",
-		Username:  "dave",
-		Active:    false,
-		Locale:    "en-US",
-		CreatedAt: "2024-02-01T00:00:00Z",
+		ID:          "user-4",
+		Username:    "dave",
+		Active:      false,
+		Locale:      "en-US",
+		CreatedAt:   "2024-02-01T00:00:00Z",
 		DisplayName: "Dave Kim",
-		Emails:    []client.Email{{Value: "dave@example.com"}},
+		Emails:      []client.Email{{Value: "dave@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-4",
@@ -159,13 +225,13 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 
 func TestUserResource_NoEmails(t *testing.T) {
 	user := client.User{
-		ID:        "user-5",
-		Username:  "eve",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-5",
+		Username:    "eve",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Eve Wu",
-		Emails:    nil,
+		Emails:      nil,
 	}
 
 	r, err := userResource(user, nil, nil, nil)
@@ -175,11 +241,11 @@ func TestUserResource_NoEmails(t *testing.T) {
 
 func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 	user := client.User{
-		ID:        "user-7",
-		Username:  "grace",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-7",
+		Username:    "grace",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Grace Hopper",
 		Name: client.Name{
 			GivenName:           "Grace",
@@ -251,13 +317,13 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 
 func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 	user := client.User{
-		ID:        "user-8",
-		Username:  "hank",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-8",
+		Username:    "hank",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Hank Hill",
-		Emails:    []client.Email{{Value: "hank@example.com"}},
+		Emails:      []client.Email{{Value: "hank@example.com"}},
 		Addresses: []client.Address{
 			{
 				Type:     "HOME",
@@ -284,13 +350,13 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 
 func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 	user := client.User{
-		ID:        "user-9",
-		Username:  "irene",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-9",
+		Username:    "irene",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Irene Adler",
-		Emails:    []client.Email{{Value: "irene@example.com"}},
+		Emails:      []client.Email{{Value: "irene@example.com"}},
 		Addresses: []client.Address{
 			{
 				Type: "WORK",
@@ -306,13 +372,13 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 
 func TestUserResource_WithWorkLocation(t *testing.T) {
 	user := client.User{
-		ID:        "user-10",
-		Username:  "kate",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-10",
+		Username:    "kate",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Kate Walsh",
-		Emails:    []client.Email{{Value: "kate@example.com"}},
+		Emails:      []client.Email{{Value: "kate@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-10",
@@ -361,13 +427,13 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 
 func TestUserResource_NilWorkLocation(t *testing.T) {
 	user := client.User{
-		ID:        "user-11",
-		Username:  "leo",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-11",
+		Username:    "leo",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Leo Park",
-		Emails:    []client.Email{{Value: "leo@example.com"}},
+		Emails:      []client.Email{{Value: "leo@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-11",
@@ -382,13 +448,13 @@ func TestUserResource_NilWorkLocation(t *testing.T) {
 
 func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 	user := client.User{
-		ID:        "user-12",
-		Username:  "maya",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-12",
+		Username:    "maya",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Maya Chen",
-		Emails:    []client.Email{{Value: "maya@example.com"}},
+		Emails:      []client.Email{{Value: "maya@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-12",
@@ -418,10 +484,10 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 
 func TestUserResource_InvalidCreatedAt(t *testing.T) {
 	user := client.User{
-		ID:        "user-6",
-		Username:  "frank",
-		Active:    true,
-		CreatedAt: "not-a-date",
+		ID:          "user-6",
+		Username:    "frank",
+		Active:      true,
+		CreatedAt:   "not-a-date",
 		DisplayName: "Frank",
 	}
 
