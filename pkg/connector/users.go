@@ -400,8 +400,16 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 
 		var workLocationPtr *client.WorkLocation
 		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
-			if wl, ok := workLocations[workerPtr.Location.WorkLocationID]; ok {
+			locationID := workerPtr.Location.WorkLocationID
+			if wl, ok := workLocations[locationID]; ok {
 				workLocationPtr = &wl
+			} else {
+				recovered, rl, err := o.fetchWorkLocation(ctx, locationID)
+				annos = *annos.WithRateLimiting(rl)
+				if err != nil {
+					return nil, &resource.SyncOpResults{Annotations: annos}, err
+				}
+				workLocationPtr = recovered
 			}
 		}
 
@@ -534,6 +542,14 @@ func (o *userBuilder) fetchWorker(ctx context.Context, userID string) (*client.W
 		}
 	}
 	return &chosen, rl, nil
+}
+
+func (o *userBuilder) fetchWorkLocation(ctx context.Context, locationID string) (*client.WorkLocation, *v2.RateLimitDescription, error) {
+	wl, rl, err := o.client.GetWorkLocationByID(ctx, locationID)
+	if err != nil {
+		return nil, rl, fmt.Errorf("baton-rippling: on-demand work location fetch failed for %s: %w", locationID, err)
+	}
+	return wl, rl, nil
 }
 
 func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {

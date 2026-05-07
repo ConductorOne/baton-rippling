@@ -95,6 +95,19 @@ func (c *Client) ListWorkLocations(ctx context.Context, nextLink string) (*WorkL
 	return &workLocations, rl, nil
 }
 
+func (c *Client) GetWorkLocationByID(ctx context.Context, locationID string) (*WorkLocation, *v2.RateLimitDescription, error) {
+	u, err := url.JoinPath(c.workLocationsURL(), locationID+"/")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build work location URL for %s: %w", locationID, err)
+	}
+	var workLocation WorkLocation
+	rl, err := c.doGet(ctx, u, "", &workLocation)
+	if err != nil {
+		return nil, rl, fmt.Errorf("failed to fetch work location %s: %w", locationID, err)
+	}
+	return &workLocation, rl, nil
+}
+
 func (c *Client) ListUsers(ctx context.Context, nextLink string) (*UsersResponse, *v2.RateLimitDescription, error) {
 	var usersResponse UsersResponse
 	rl, err := c.doGet(ctx, c.usersURL(), nextLink, &usersResponse)
