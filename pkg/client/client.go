@@ -41,15 +41,15 @@ func New(ctx context.Context, apiToken string, baseURL string, expandOpts Expand
 	}, nil
 }
 
-func (c *Client) usersURL() string         { u, _ := url.JoinPath(c.baseURL, usersPath); return u }
 func (c *Client) teamsURL() string         { u, _ := url.JoinPath(c.baseURL, teamsPath); return u }
 func (c *Client) workersURL() string       { u, _ := url.JoinPath(c.baseURL, workersPath); return u }
 func (c *Client) workLocationsURL() string { u, _ := url.JoinPath(c.baseURL, workLocationsPath); return u }
 
 func (c *Client) buildExpandParam() string {
-	// Manager is always expanded since it only requires the workers.read scope
-	// which is already required for the base workers endpoint.
-	fields := []string{"manager"}
+	// User and manager are always expanded: user is the canonical identity for
+	// each emitted resource, and manager only requires workers.read which is
+	// already required for the base workers endpoint.
+	fields := []string{"user", "manager"}
 	if c.expandOptions.Department {
 		fields = append(fields, "department")
 	}
