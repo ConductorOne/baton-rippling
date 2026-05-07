@@ -409,9 +409,6 @@ func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss ses
 				if err != nil {
 					return nil, &resource.SyncOpResults{Annotations: annos}, err
 				}
-				if recovered == nil {
-					return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: worker for user %s references work location %s but it was not found", user.ID, locationID)
-				}
 				workLocationPtr = recovered
 			}
 		}
