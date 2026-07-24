@@ -6,6 +6,7 @@ import (
 
 	"github.com/conductorone/baton-rippling/pkg/client"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
+	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/session"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -114,24 +115,45 @@ func resourceForUserID(t *testing.T, userID string) *v2.Resource {
 	return &v2.Resource{Id: id}
 }
 
-// TestUserBuilder_Grants_SyncTeamsFalse_NoPanic proves that Grants() short-circuits
-// before touching opts.Session at all when syncTeams is false: opts is a zero-value
-// SyncOpAttrs{}, so opts.Session is a nil interface. If the gate weren't the very
-// first thing in the function body, the session.GetJSON call below it would
-// dereference the nil interface and panic.
-func TestUserBuilder_Grants_SyncTeamsFalse_NoPanic(t *testing.T) {
+// TestUserBuilder_ResourceType_SyncTeamsTrue_SkipsEntitlementsOnly proves that when
+// the team resource type is being synced, the user resource type advertises only
+// the base SkipEntitlements annotation (unchanged from userResourceType) — meaning
+// the SDK will still call Grants() so the cross-type team-membership emission runs.
+func TestUserBuilder_ResourceType_SyncTeamsTrue_SkipsEntitlementsOnly(t *testing.T) {
+	o := newUserBuilder(nil, false, nil, true)
+
+	rt := o.ResourceType(context.Background())
+	require.NotNil(t, rt)
+
+	annos := annotations.Annotations(rt.GetAnnotations())
+	assert.True(t, annos.Contains(&v2.SkipEntitlements{}))
+	assert.False(t, annos.Contains(&v2.SkipEntitlementsAndGrants{}))
+
+	// Returned unchanged, so it must be the exact shared package-level var.
+	assert.Same(t, userResourceType, rt)
+}
+
+// TestUserBuilder_ResourceType_SyncTeamsFalse_SkipsEntitlementsAndGrants proves that
+// when the team resource type is NOT being synced, the user resource type advertises
+// SkipEntitlementsAndGrants — since userBuilder.Grants() only ever produces cross-type
+// team-membership grants and nothing of its own, this tells the SDK to skip calling
+// Entitlements()/Grants() for user resources entirely rather than wastefully invoking
+// Grants() only to compute grants for a type that isn't being synced.
+func TestUserBuilder_ResourceType_SyncTeamsFalse_SkipsEntitlementsAndGrants(t *testing.T) {
 	o := newUserBuilder(nil, false, nil, false)
 
-	var grants []*v2.Grant
-	var results *resource.SyncOpResults
-	var err error
-	assert.NotPanics(t, func() {
-		grants, results, err = o.Grants(context.Background(), resourceForUserID(t, "user-42"), resource.SyncOpAttrs{})
-	})
+	rt := o.ResourceType(context.Background())
+	require.NotNil(t, rt)
 
-	assert.NoError(t, err)
-	assert.Nil(t, grants)
-	assert.Nil(t, results)
+	annos := annotations.Annotations(rt.GetAnnotations())
+	assert.True(t, annos.Contains(&v2.SkipEntitlementsAndGrants{}))
+
+	// Must be a clone, never a mutation of the shared package-level var: the
+	// base var's own annotations must remain untouched (no SkipEntitlementsAndGrants).
+	assert.NotSame(t, userResourceType, rt)
+	baseAnnos := annotations.Annotations(userResourceType.GetAnnotations())
+	assert.False(t, baseAnnos.Contains(&v2.SkipEntitlementsAndGrants{}))
+	assert.True(t, baseAnnos.Contains(&v2.SkipEntitlements{}))
 }
 
 // TestUserBuilder_Grants_SyncTeamsTrue_EmitsTeamGrants proves the pre-existing

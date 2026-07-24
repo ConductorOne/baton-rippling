@@ -16,6 +16,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const workType = "WORK"
@@ -40,20 +41,26 @@ type userBuilder struct {
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
-	if !o.syncTeams {
-		// Grants() is a pure no-op when teams aren't being synced (see below), and
-		// user already never emits entitlements — so advertise SkipEntitlementsAndGrants
-		// instead of the static userResourceType's SkipEntitlements annotation.
-		// Built as a fresh composite literal (not a value-copy of userResourceType) to
-		// avoid copying the proto message's internal MessageState (go vet: copylocks).
-		return &v2.ResourceType{
-			Id:          userResourceType.Id,
-			DisplayName: userResourceType.DisplayName,
-			Traits:      userResourceType.Traits,
-			Annotations: annotations.New(&v2.SkipEntitlementsAndGrants{}),
-		}
+	if o.syncTeams {
+		return userResourceType
 	}
-	return userResourceType
+
+	// userBuilder.Grants() emits team-membership grants as a cross-type sync
+	// optimization and produces no entitlements/grants of its own. When teams
+	// aren't being synced, that call is pure wasted work, so advertise
+	// SkipEntitlementsAndGrants on top of the base type's SkipEntitlements so
+	// the SDK skips calling Entitlements()/Grants() for user resources entirely.
+	// proto.Clone (never a struct value-copy, which would copy the proto
+	// message's internal MessageState) so the shared package-level
+	// userResourceType var is never mutated.
+	rt, ok := proto.Clone(userResourceType).(*v2.ResourceType)
+	if !ok {
+		return userResourceType
+	}
+	annos := annotations.Annotations(rt.Annotations)
+	annos.Append(&v2.SkipEntitlementsAndGrants{})
+	rt.Annotations = annos
+	return rt
 }
 
 func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
@@ -498,10 +505,6 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 // Grants returns team membership grants for this user by looking up the user's
 // worker record from the session store and creating a grant for each team.
 func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
-	if !o.syncTeams {
-		return nil, nil, nil
-	}
-
 	var annos annotations.Annotations
 	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {

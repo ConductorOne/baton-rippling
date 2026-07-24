@@ -13,6 +13,10 @@ sidebarTitle: Rippling
 | Accounts     | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |   
 | Teams        | <Icon icon="square-check" iconType="solid"  color="#c937ae"/>   |           |   
 
+<Note>
+As an optimization, Team membership grants are computed while syncing Accounts (the Rippling worker record already includes team membership). If a scoped sync excludes the Teams resource type, the connector skips this computation entirely rather than wastefully producing grants for a type that isn't being synced.
+</Note>
+
 ## Gather Rippling credentials 
 
 Each setup method requires you to pass in credentials generated in Rippling. Gather these credentials before you move on. 
