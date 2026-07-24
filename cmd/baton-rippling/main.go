@@ -53,12 +53,15 @@ func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.Run
 		return nil, err
 	}
 
+	connectorOpts := &cli.ConnectorOpts{SyncResourceTypeIDs: runTimeOpts.SyncResourceTypeIDs}
+	syncTeams := connectorOpts.WillSyncResourceType(connector.TeamResourceTypeID)
+
 	cb, err := connector.New(ctx, config.ApiToken, config.BaseUrl, client.ExpandOptions{
 		Department:     config.ExpandDepartment,
 		EmploymentType: config.ExpandEmploymentType,
 		Level:          config.ExpandLevel,
 		CustomFields:   len(config.CustomFields) > 0,
-	}, config.ExpandWorkLocations, config.CustomFields)
+	}, config.ExpandWorkLocations, config.CustomFields, syncTeams)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

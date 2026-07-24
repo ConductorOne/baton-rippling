@@ -36,9 +36,23 @@ type userBuilder struct {
 	client              *client.Client
 	expandWorkLocations bool
 	customFieldNames    []string
+	syncTeams           bool
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
+	if !o.syncTeams {
+		// Grants() is a pure no-op when teams aren't being synced (see below), and
+		// user already never emits entitlements — so advertise SkipEntitlementsAndGrants
+		// instead of the static userResourceType's SkipEntitlements annotation.
+		// Built as a fresh composite literal (not a value-copy of userResourceType) to
+		// avoid copying the proto message's internal MessageState (go vet: copylocks).
+		return &v2.ResourceType{
+			Id:          userResourceType.Id,
+			DisplayName: userResourceType.DisplayName,
+			Traits:      userResourceType.Traits,
+			Annotations: annotations.New(&v2.SkipEntitlementsAndGrants{}),
+		}
+	}
 	return userResourceType
 }
 
@@ -484,6 +498,10 @@ func (o *userBuilder) Entitlements(_ context.Context, _ *v2.Resource, _ resource
 // Grants returns team membership grants for this user by looking up the user's
 // worker record from the session store and creating a grant for each team.
 func (o *userBuilder) Grants(ctx context.Context, r *v2.Resource, opts resource.SyncOpAttrs) ([]*v2.Grant, *resource.SyncOpResults, error) {
+	if !o.syncTeams {
+		return nil, nil, nil
+	}
+
 	var annos annotations.Annotations
 	worker, found, err := session.GetJSON[client.Worker](ctx, opts.Session, r.Id.Resource, sessions.WithPrefix(workersSessionPrefix))
 	if err != nil {
@@ -552,10 +570,11 @@ func (o *userBuilder) fetchWorkLocation(ctx context.Context, locationID string) 
 	return wl, rl, nil
 }
 
-func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {
+func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string, syncTeams bool) *userBuilder {
 	return &userBuilder{
 		client:              client,
 		expandWorkLocations: expandWorkLocations,
 		customFieldNames:    customFieldNames,
+		syncTeams:           syncTeams,
 	}
 }

@@ -5,6 +5,10 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 )
 
+// TeamResourceTypeID is the resource type ID for teams, exported so callers
+// (e.g. main.go) can check it against WillSyncResourceType without a magic string.
+const TeamResourceTypeID = "team"
+
 // The user resource type is for all user objects from the database.
 var userResourceType = &v2.ResourceType{
 	Id:          "user",
@@ -14,7 +18,7 @@ var userResourceType = &v2.ResourceType{
 }
 
 var teamResourceType = &v2.ResourceType{
-	Id:          "team",
+	Id:          TeamResourceTypeID,
 	DisplayName: "Team",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
 	Annotations: annotations.New(&v2.SkipGrants{}),
