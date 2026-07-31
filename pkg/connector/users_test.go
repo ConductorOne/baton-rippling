@@ -231,7 +231,7 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 
 	// Extract profile and verify only the first WORK address is used
 
-	profileFields := r.GetProfile().GetFields()
+	profileFields := resource.GetProfile(r).GetFields()
 	addrVal := profileFields["address"].GetStructValue()
 	if assert.NotNil(t, addrVal, "expected address in profile") {
 		// First WORK address should be kept
@@ -271,7 +271,7 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 	assert.Equal(t, "Hank Hill", r.DisplayName)
 
 	// Non-WORK addresses should not produce an address field
-	assert.Nil(t, r.GetProfile().GetFields()["address"], "expected no address for non-WORK type")
+	assert.Nil(t, resource.GetProfile(r).GetFields()["address"], "expected no address for non-WORK type")
 }
 
 func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
@@ -332,7 +332,7 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 	}
 	assert.Equal(t, "Kate Walsh", r.DisplayName)
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "New York Office", fields["work_location_name"].GetStringValue())
 
@@ -394,7 +394,7 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 	}
 	assert.Equal(t, "Maya Chen", r.DisplayName)
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Remote", fields["work_location_name"].GetStringValue())
 	assert.Nil(t, fields["work_location_address"], "expected no work_location_address when address is nil")
@@ -440,7 +440,7 @@ func TestUserResource_CustomFieldsAddedToProfile(t *testing.T) {
 		return
 	}
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Digital Onboarding", fields["scrum_teams"].GetStringValue())
 	assert.Equal(t, "DOB", fields["scrum_team_code"].GetStringValue())
@@ -471,7 +471,7 @@ func TestUserResource_CustomFieldsCaseInsensitive(t *testing.T) {
 		return
 	}
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Platform", fields["scrum_teams"].GetStringValue())
 }
@@ -500,7 +500,7 @@ func TestUserResource_NoCustomFieldsConfig(t *testing.T) {
 		return
 	}
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Nil(t, fields["scrum_teams"], "custom field should not appear when config is empty")
 }
@@ -530,7 +530,7 @@ func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
 		return
 	}
 
-	fields := r.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	// Built-in "title" from worker.Title should be preserved, not overwritten
 	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
