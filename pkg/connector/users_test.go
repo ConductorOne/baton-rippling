@@ -102,13 +102,13 @@ func TestUserResource_WithFullWorker(t *testing.T) {
 
 func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 	user := client.User{
-		ID:        "user-3",
-		Username:  "carol",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-03-01T00:00:00Z",
+		ID:          "user-3",
+		Username:    "carol",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-03-01T00:00:00Z",
 		DisplayName: "Carol Lee",
-		Emails:    []client.Email{{Value: "carol@example.com"}},
+		Emails:      []client.Email{{Value: "carol@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:             "worker-3",
@@ -129,13 +129,13 @@ func TestUserResource_WorkerWithNilNestedStructs(t *testing.T) {
 
 func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 	user := client.User{
-		ID:        "user-4",
-		Username:  "dave",
-		Active:    false,
-		Locale:    "en-US",
-		CreatedAt: "2024-02-01T00:00:00Z",
+		ID:          "user-4",
+		Username:    "dave",
+		Active:      false,
+		Locale:      "en-US",
+		CreatedAt:   "2024-02-01T00:00:00Z",
 		DisplayName: "Dave Kim",
-		Emails:    []client.Email{{Value: "dave@example.com"}},
+		Emails:      []client.Email{{Value: "dave@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-4",
@@ -159,13 +159,13 @@ func TestUserResource_WorkerEmptyStringsNotIncluded(t *testing.T) {
 
 func TestUserResource_NoEmails(t *testing.T) {
 	user := client.User{
-		ID:        "user-5",
-		Username:  "eve",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-5",
+		Username:    "eve",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Eve Wu",
-		Emails:    nil,
+		Emails:      nil,
 	}
 
 	r, err := userResource(user, nil, nil, nil)
@@ -175,11 +175,11 @@ func TestUserResource_NoEmails(t *testing.T) {
 
 func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 	user := client.User{
-		ID:        "user-7",
-		Username:  "grace",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-7",
+		Username:    "grace",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Grace Hopper",
 		Name: client.Name{
 			GivenName:           "Grace",
@@ -230,12 +230,8 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 	assert.Equal(t, "user-7", r.Id.Resource)
 
 	// Extract profile and verify only the first WORK address is used
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
 
-	profileFields := trait.GetProfile().GetFields()
+	profileFields := resource.GetProfile(r).GetFields()
 	addrVal := profileFields["address"].GetStructValue()
 	if assert.NotNil(t, addrVal, "expected address in profile") {
 		// First WORK address should be kept
@@ -251,13 +247,13 @@ func TestUserResource_ProfileNameAndAddressFields(t *testing.T) {
 
 func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 	user := client.User{
-		ID:        "user-8",
-		Username:  "hank",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-8",
+		Username:    "hank",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Hank Hill",
-		Emails:    []client.Email{{Value: "hank@example.com"}},
+		Emails:      []client.Email{{Value: "hank@example.com"}},
 		Addresses: []client.Address{
 			{
 				Type:     "HOME",
@@ -275,22 +271,18 @@ func TestUserResource_AddressWithNonWorkType(t *testing.T) {
 	assert.Equal(t, "Hank Hill", r.DisplayName)
 
 	// Non-WORK addresses should not produce an address field
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	assert.Nil(t, trait.GetProfile().GetFields()["address"], "expected no address for non-WORK type")
+	assert.Nil(t, resource.GetProfile(r).GetFields()["address"], "expected no address for non-WORK type")
 }
 
 func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 	user := client.User{
-		ID:        "user-9",
-		Username:  "irene",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-9",
+		Username:    "irene",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Irene Adler",
-		Emails:    []client.Email{{Value: "irene@example.com"}},
+		Emails:      []client.Email{{Value: "irene@example.com"}},
 		Addresses: []client.Address{
 			{
 				Type: "WORK",
@@ -306,13 +298,13 @@ func TestUserResource_AddressAllFieldsEmpty(t *testing.T) {
 
 func TestUserResource_WithWorkLocation(t *testing.T) {
 	user := client.User{
-		ID:        "user-10",
-		Username:  "kate",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-10",
+		Username:    "kate",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Kate Walsh",
-		Emails:    []client.Email{{Value: "kate@example.com"}},
+		Emails:      []client.Email{{Value: "kate@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-10",
@@ -340,11 +332,7 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 	}
 	assert.Equal(t, "Kate Walsh", r.DisplayName)
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "New York Office", fields["work_location_name"].GetStringValue())
 
@@ -361,13 +349,13 @@ func TestUserResource_WithWorkLocation(t *testing.T) {
 
 func TestUserResource_NilWorkLocation(t *testing.T) {
 	user := client.User{
-		ID:        "user-11",
-		Username:  "leo",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-11",
+		Username:    "leo",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Leo Park",
-		Emails:    []client.Email{{Value: "leo@example.com"}},
+		Emails:      []client.Email{{Value: "leo@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-11",
@@ -382,13 +370,13 @@ func TestUserResource_NilWorkLocation(t *testing.T) {
 
 func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 	user := client.User{
-		ID:        "user-12",
-		Username:  "maya",
-		Active:    true,
-		Locale:    "en-US",
-		CreatedAt: "2024-01-01T00:00:00Z",
+		ID:          "user-12",
+		Username:    "maya",
+		Active:      true,
+		Locale:      "en-US",
+		CreatedAt:   "2024-01-01T00:00:00Z",
 		DisplayName: "Maya Chen",
-		Emails:    []client.Email{{Value: "maya@example.com"}},
+		Emails:      []client.Email{{Value: "maya@example.com"}},
 	}
 	worker := &client.Worker{
 		ID:     "worker-12",
@@ -406,11 +394,7 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 	}
 	assert.Equal(t, "Maya Chen", r.DisplayName)
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Remote", fields["work_location_name"].GetStringValue())
 	assert.Nil(t, fields["work_location_address"], "expected no work_location_address when address is nil")
@@ -418,10 +402,10 @@ func TestUserResource_WorkLocationNameOnly(t *testing.T) {
 
 func TestUserResource_InvalidCreatedAt(t *testing.T) {
 	user := client.User{
-		ID:        "user-6",
-		Username:  "frank",
-		Active:    true,
-		CreatedAt: "not-a-date",
+		ID:          "user-6",
+		Username:    "frank",
+		Active:      true,
+		CreatedAt:   "not-a-date",
 		DisplayName: "Frank",
 	}
 
@@ -456,11 +440,7 @@ func TestUserResource_CustomFieldsAddedToProfile(t *testing.T) {
 		return
 	}
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Digital Onboarding", fields["scrum_teams"].GetStringValue())
 	assert.Equal(t, "DOB", fields["scrum_team_code"].GetStringValue())
@@ -491,11 +471,7 @@ func TestUserResource_CustomFieldsCaseInsensitive(t *testing.T) {
 		return
 	}
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Equal(t, "Platform", fields["scrum_teams"].GetStringValue())
 }
@@ -524,11 +500,7 @@ func TestUserResource_NoCustomFieldsConfig(t *testing.T) {
 		return
 	}
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	assert.Nil(t, fields["scrum_teams"], "custom field should not appear when config is empty")
 }
@@ -558,11 +530,7 @@ func TestUserResource_CustomFieldsDoNotOverwriteBuiltIn(t *testing.T) {
 		return
 	}
 
-	trait, err := resource.GetUserTrait(r)
-	if !assert.NoError(t, err) {
-		return
-	}
-	fields := trait.GetProfile().GetFields()
+	fields := resource.GetProfile(r).GetFields()
 
 	// Built-in "title" from worker.Title should be preserved, not overwritten
 	assert.Equal(t, "Senior Engineer", fields["title"].GetStringValue())
