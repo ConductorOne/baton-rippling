@@ -255,9 +255,6 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 	}
 
 	userOpts := []resource.UserTraitOption{
-		resource.WithUserProfile(profile),
-		resource.WithCreatedAt(createdAt),
-		resource.WithStatus(userStatus),
 		resource.WithUserLogin(user.Username, aliases...),
 	}
 
@@ -271,6 +268,9 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 		userResourceType,
 		user.ID,
 		userOpts,
+		resource.WithResourceProfile(profile),
+		resource.WithResourceCreatedAt(createdAt),
+		resource.WithResourceStatus(v2.Status_ResourceStatus(userStatus), ""),
 	)
 }
 
