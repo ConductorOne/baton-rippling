@@ -53,12 +53,16 @@ func getConnector(ctx context.Context, config *cfg.Rippling, runTimeOpts cli.Run
 		return nil, err
 	}
 
+	// An empty SyncResourceTypeIDs means no filter, so nothing is skipped.
+	connectorOpts := &cli.ConnectorOpts{SyncResourceTypeIDs: runTimeOpts.SyncResourceTypeIDs}
+	skipTeamResourceType := !connectorOpts.WillSyncResourceType(connector.TeamResourceTypeID)
+
 	cb, err := connector.New(ctx, config.ApiToken, config.BaseUrl, client.ExpandOptions{
 		Department:     config.ExpandDepartment,
 		EmploymentType: config.ExpandEmploymentType,
 		Level:          config.ExpandLevel,
 		CustomFields:   len(config.CustomFields) > 0,
-	}, config.ExpandWorkLocations, config.CustomFields)
+	}, config.ExpandWorkLocations, config.CustomFields, skipTeamResourceType)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err

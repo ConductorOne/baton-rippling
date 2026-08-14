@@ -16,6 +16,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const workType = "WORK"
@@ -34,12 +35,13 @@ const (
 
 type userBuilder struct {
 	client              *client.Client
+	resourceType        *v2.ResourceType
 	expandWorkLocations bool
 	customFieldNames    []string
 }
 
 func (o *userBuilder) ResourceType(_ context.Context) *v2.ResourceType {
-	return userResourceType
+	return o.resourceType
 }
 
 func userResource(user client.User, worker *client.Worker, workLocation *client.WorkLocation, customFieldNames []string) (*v2.Resource, error) {
@@ -552,8 +554,21 @@ func (o *userBuilder) fetchWorkLocation(ctx context.Context, locationID string) 
 	return wl, rl, nil
 }
 
-func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string) *userBuilder {
+// newUserBuilder returns the user syncer. Users have no entitlements of their
+// own, and their only grants are cross-type team grants, so when team is
+// excluded from the sync the grants pass is skipped too.
+func newUserBuilder(client *client.Client, expandWorkLocations bool, customFieldNames []string, skipTeamResourceType bool) *userBuilder {
+	rt := proto.Clone(userResourceType).(*v2.ResourceType)
+	annos := annotations.Annotations(rt.GetAnnotations())
+	if skipTeamResourceType {
+		annos.Update(&v2.SkipEntitlementsAndGrants{})
+	} else {
+		annos.Update(&v2.SkipEntitlements{})
+	}
+	rt.Annotations = annos
+
 	return &userBuilder{
+		resourceType:        rt,
 		client:              client,
 		expandWorkLocations: expandWorkLocations,
 		customFieldNames:    customFieldNames,
