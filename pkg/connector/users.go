@@ -23,16 +23,6 @@ const workType = "WORK"
 const workersSessionPrefix = "workers"
 const workLocationsSessionPrefix = "work_locations"
 
-// Page token prefixes to distinguish the phases of user List():
-// Phase 1 (optional): pages through work locations, storing each in the session store.
-// Phase 2: pages through workers, storing each page in the session store.
-// Phase 3: pages through users, looking up cached workers and locations per-user.
-const (
-	locationsPagePrefix = "l:"
-	workersPagePrefix   = "w:"
-	usersPagePrefix     = "u:"
-)
-
 type userBuilder struct {
 	client              *client.Client
 	resourceType        *v2.ResourceType
@@ -276,179 +266,79 @@ func userResource(user client.User, worker *client.Worker, workLocation *client.
 	)
 }
 
-// listWorkLocationPage fetches one page of work locations from the API and
-// stores them in the session store. Returns no resources — this phase only populates the cache.
-func (o *userBuilder) listWorkLocationPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
+func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
 	var annos annotations.Annotations
-	resp, ratelimitData, err := o.client.ListWorkLocations(ctx, pageToken)
-	annos = *annos.WithRateLimiting(ratelimitData)
-	if err != nil {
-		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list work locations: %w", err)
-	}
-
-	toStore := make(map[string]client.WorkLocation, len(resp.Results))
-	for _, loc := range resp.Results {
-		if loc.ID != "" {
-			toStore[loc.ID] = loc
-		}
-	}
-	if len(toStore) > 0 {
-		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workLocationsSessionPrefix)); err != nil {
-			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store work locations in session store: %w", err)
-		}
-	}
-
-	// If more pages remain, stay in the locations phase.
-	// Otherwise transition to the workers phase.
-	nextToken := workersPagePrefix
-	if resp.NextLink != "" {
-		nextToken = locationsPagePrefix + resp.NextLink
-	}
-
-	return nil, &resource.SyncOpResults{
-		NextPageToken: nextToken,
-		Annotations:   annos,
-	}, nil
-}
-
-// listWorkerPage fetches one page of workers from the API and stores them in
-// the session store. Returns no resources — this phase only populates the cache.
-func (o *userBuilder) listWorkerPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
-	var annos annotations.Annotations
-	workersResponse, ratelimitData, err := o.client.ListWorkers(ctx, pageToken)
+	workersResponse, ratelimitData, err := o.client.ListWorkers(ctx, opts.PageToken.Token)
 	annos = *annos.WithRateLimiting(ratelimitData)
 	if err != nil {
 		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list workers: %w", err)
 	}
 
-	toStore := make(map[string]client.Worker, len(workersResponse.Results))
+	rv := make([]*v2.Resource, 0, len(workersResponse.Results))
+	workersToStore := make(map[string]client.Worker, len(workersResponse.Results))
+	locationCache := make(map[string]*client.WorkLocation)
+
 	for _, worker := range workersResponse.Results {
-		if worker.UserID != "" {
-			toStore[worker.UserID] = worker
+		if worker.User == nil || worker.User.ID == "" {
+			continue
 		}
-	}
-	if len(toStore) > 0 {
-		if err := session.SetManyJSON(ctx, ss, toStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
-			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store workers in session store: %w", err)
-		}
-	}
+		user := *worker.User
 
-	// If more worker pages remain, stay in the workers phase.
-	// Otherwise transition to the users phase.
-	nextToken := usersPagePrefix
-	if workersResponse.NextLink != "" {
-		nextToken = workersPagePrefix + workersResponse.NextLink
-	}
-
-	return nil, &resource.SyncOpResults{
-		NextPageToken: nextToken,
-		Annotations:   annos,
-	}, nil
-}
-
-// listUserPage fetches one page of users, enriching each with its cached worker data.
-func (o *userBuilder) listUserPage(ctx context.Context, pageToken string, ss sessions.SessionStore) ([]*v2.Resource, *resource.SyncOpResults, error) {
-	var annos annotations.Annotations
-	usersResponse, ratelimitData, err := o.client.ListUsers(ctx, pageToken)
-	annos = *annos.WithRateLimiting(ratelimitData)
-	if err != nil {
-		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to list users: %w", err)
-	}
-
-	userIDs := make([]string, 0, len(usersResponse.Results))
-	for _, user := range usersResponse.Results {
-		userIDs = append(userIDs, user.ID)
-	}
-
-	workers, err := session.GetManyJSON[client.Worker](ctx, ss, userIDs, sessions.WithPrefix(workersSessionPrefix))
-	if err != nil {
-		return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get workers from session store: %w", err)
-	}
-
-	// Batch-fetch work locations for all workers on this page.
-	var workLocations map[string]client.WorkLocation
-	if o.expandWorkLocations {
-		locationIDs := make([]string, 0)
-		seen := make(map[string]bool)
-		for _, user := range usersResponse.Results {
-			if worker, found := workers[user.ID]; found {
-				if worker.Location != nil && worker.Location.WorkLocationID != "" && !seen[worker.Location.WorkLocationID] {
-					locationIDs = append(locationIDs, worker.Location.WorkLocationID)
-					seen[worker.Location.WorkLocationID] = true
-				}
-			}
-		}
-		if len(locationIDs) > 0 {
-			workLocations, err = session.GetManyJSON[client.WorkLocation](ctx, ss, locationIDs, sessions.WithPrefix(workLocationsSessionPrefix))
-			if err != nil {
-				return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to get work locations from session store: %w", err)
-			}
-		}
-	}
-
-	rv := make([]*v2.Resource, 0, len(usersResponse.Results))
-	for _, user := range usersResponse.Results {
-		var workerPtr *client.Worker
-		if worker, found := workers[user.ID]; found {
-			workerPtr = &worker
-		} else {
-			recovered, rl, err := o.fetchWorker(ctx, user.ID)
-			annos = *annos.WithRateLimiting(rl)
-			if err != nil {
-				return nil, &resource.SyncOpResults{Annotations: annos}, err
-			}
-			workerPtr = recovered
+		workLocationPtr, rl, err := o.resolveWorkLocation(ctx, opts.Session, worker.Location, locationCache)
+		annos = *annos.WithRateLimiting(rl)
+		if err != nil {
+			return nil, &resource.SyncOpResults{Annotations: annos}, err
 		}
 
-		var workLocationPtr *client.WorkLocation
-		if o.expandWorkLocations && workerPtr != nil && workerPtr.Location != nil && workerPtr.Location.WorkLocationID != "" {
-			locationID := workerPtr.Location.WorkLocationID
-			if wl, ok := workLocations[locationID]; ok {
-				workLocationPtr = &wl
-			} else {
-				recovered, rl, err := o.fetchWorkLocation(ctx, locationID)
-				annos = *annos.WithRateLimiting(rl)
-				if err != nil {
-					return nil, &resource.SyncOpResults{Annotations: annos}, err
-				}
-				workLocationPtr = recovered
-			}
-		}
-
-		r, err := userResource(user, workerPtr, workLocationPtr, o.customFieldNames)
+		r, err := userResource(user, &worker, workLocationPtr, o.customFieldNames)
 		if err != nil {
 			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to convert user %s to resource: %w", user.ID, err)
 		}
 		rv = append(rv, r)
+		workersToStore[user.ID] = worker
 	}
 
-	nextToken := ""
-	if usersResponse.NextLink != "" {
-		nextToken = usersPagePrefix + usersResponse.NextLink
+	if len(workersToStore) > 0 {
+		if err := session.SetManyJSON(ctx, opts.Session, workersToStore, sessions.WithPrefix(workersSessionPrefix)); err != nil {
+			return nil, &resource.SyncOpResults{Annotations: annos}, fmt.Errorf("baton-rippling: failed to store workers in session store: %w", err)
+		}
 	}
 
 	return rv, &resource.SyncOpResults{
-		NextPageToken: nextToken,
+		NextPageToken: workersResponse.NextLink,
 		Annotations:   annos,
 	}, nil
 }
 
-func (o *userBuilder) List(ctx context.Context, _ *v2.ResourceId, opts resource.SyncOpAttrs) ([]*v2.Resource, *resource.SyncOpResults, error) {
-	token := opts.PageToken.Token
-
-	switch {
-	case o.expandWorkLocations && (token == "" || strings.HasPrefix(token, locationsPagePrefix)):
-		// Phase 1 (optional): page through work locations, storing each in the session store.
-		return o.listWorkLocationPage(ctx, strings.TrimPrefix(token, locationsPagePrefix), opts.Session)
-
-	case token == "" || strings.HasPrefix(token, workersPagePrefix):
-		// Phase 2: page through workers, storing each page in the session store.
-		return o.listWorkerPage(ctx, strings.TrimPrefix(token, workersPagePrefix), opts.Session)
-
-	default:
-		// Phase 3: page through users, looking up cached workers and locations per-user.
-		return o.listUserPage(ctx, strings.TrimPrefix(token, usersPagePrefix), opts.Session)
+// Worker locations are critical HR data.
+func (o *userBuilder) resolveWorkLocation(ctx context.Context, ss sessions.SessionStore, loc *client.Location, perPage map[string]*client.WorkLocation) (*client.WorkLocation, *v2.RateLimitDescription, error) {
+	if !o.expandWorkLocations || loc == nil || loc.WorkLocationID == "" {
+		return nil, nil, nil
 	}
+	locationID := loc.WorkLocationID
+
+	if cached, ok := perPage[locationID]; ok {
+		return cached, nil, nil
+	}
+
+	wl, found, err := session.GetJSON[client.WorkLocation](ctx, ss, locationID, sessions.WithPrefix(workLocationsSessionPrefix))
+	if err != nil {
+		return nil, nil, fmt.Errorf("baton-rippling: failed to read work location %s from session store: %w", locationID, err)
+	}
+	if found {
+		perPage[locationID] = &wl
+		return &wl, nil, nil
+	}
+
+	fetched, rl, err := o.fetchWorkLocation(ctx, locationID)
+	if err != nil {
+		return nil, rl, err
+	}
+	if err := session.SetJSON(ctx, ss, locationID, *fetched, sessions.WithPrefix(workLocationsSessionPrefix)); err != nil {
+		return nil, rl, fmt.Errorf("baton-rippling: failed to store work location %s in session store: %w", locationID, err)
+	}
+	perPage[locationID] = fetched
+	return fetched, rl, nil
 }
 
 // resolveWorkEmail returns the user's work email for use as a login alias:
