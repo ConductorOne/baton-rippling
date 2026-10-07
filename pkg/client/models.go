@@ -63,12 +63,6 @@ type RedactedField struct {
 	Reason string `json:"reason"`
 }
 
-type UsersResponse struct {
-	Meta     Meta   `json:"__meta"`
-	Results  []User `json:"results"`
-	NextLink string `json:"next_link,omitempty"`
-}
-
 type Team struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`
@@ -84,23 +78,7 @@ type TeamsResponse struct {
 	NextLink string `json:"next_link,omitempty"`
 }
 
-type WorkerUser struct {
-	ID                string        `json:"id"`
-	CreatedAt         string        `json:"created_at"`
-	UpdatedAt         string        `json:"updated_at"`
-	Active            bool          `json:"active,omitempty"`
-	Username          string        `json:"username,omitempty"`
-	DisplayName       string        `json:"display_name,omitempty"`
-	Name              Name          `json:"name,omitempty"`
-	Emails            []Email       `json:"emails,omitempty"`
-	PhoneNumbers      []PhoneNumber `json:"phone_numbers,omitempty"`
-	Addresses         []Address     `json:"addresses,omitempty"`
-	Photos            []Photo       `json:"photos,omitempty"`
-	PreferredLanguage string        `json:"preferred_language,omitempty"`
-	Locale            string        `json:"locale,omitempty"`
-	Timezone          string        `json:"timezone,omitempty"`
-	Number            string        `json:"number,omitempty"`
-}
+type WorkerUser = User
 
 type Country struct {
 	Code string `json:"code,omitempty"`
