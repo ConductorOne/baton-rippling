@@ -108,11 +108,3 @@ func (c *Client) GetWorkLocationByID(ctx context.Context, locationID string) (*W
 	return &workLocation, rl, nil
 }
 
-func (c *Client) ListUsers(ctx context.Context, nextLink string) (*UsersResponse, *v2.RateLimitDescription, error) {
-	var usersResponse UsersResponse
-	rl, err := c.doGet(ctx, c.usersURL(), nextLink, &usersResponse)
-	if err != nil {
-		return nil, rl, fmt.Errorf("failed to list users: %w", err)
-	}
-	return &usersResponse, rl, nil
-}
